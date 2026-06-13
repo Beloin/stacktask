@@ -76,6 +76,7 @@ class _CardStackWidgetState extends State<CardStackWidget>
 
   void _onDragUpdate(DragUpdateDetails details) {
     if (!_isDragging) return;
+    // TODO: bsena; In the new implementation have a listeger, something like the MVVM
     setState(() {
       _dragX += details.delta.dx;
       _dragY += details.delta.dy;
@@ -257,7 +258,7 @@ class _CardStackWidgetState extends State<CardStackWidget>
                   onVerticalDragStart: (details) =>
                       _onPeekedDragStart(details, i),
                   onVerticalDragUpdate: _onDragUpdate,
-                  onVerticalDragEnd: (details) =>
+                  onVerticalDragEnd: (DragEndDetails details) =>
                       _onPeekedDragEnd(details, i),
                   onTap: () => _debouncedTap(i),
                   child: SizedBox(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:stacktask_mobile/src/core/database/database_helper.dart';
 import 'package:stacktask_mobile/src/core/repositories/stack_repository.dart';
 import 'package:stacktask_mobile/src/core/theme/app_theme.dart';
@@ -10,28 +11,40 @@ class StackTasksApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'StackTasks',
-      theme: AppTheme.darkTheme,
-      debugShowCheckedModeBanner: false,
-      home: FutureBuilder<StackViewModel>(
-        future: _createViewModel(),
-        builder: (context, snapshot) {
-          if (snapshot.hasData) {
-            return StackScreen(viewModel: snapshot.data!);
-          }
-          if (snapshot.hasError) {
-            return Scaffold(
-              body: Center(
-                child: Text('Error: ${snapshot.error}'),
-              ),
-            );
-          }
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
+    return FutureBuilder<StackViewModel>(
+      future: _createViewModel(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return MaterialApp(
+            theme: AppTheme.darkTheme,
+            debugShowCheckedModeBanner: false,
+            home: Scaffold(
+              body: Center(child: Text('Error: ${snapshot.error}')),
+            ),
           );
-        },
-      ),
+        }
+
+        if (!snapshot.hasData) {
+          return MaterialApp(
+            theme: AppTheme.darkTheme,
+            debugShowCheckedModeBanner: false,
+            home: const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            ),
+          );
+        }
+
+        final viewModel = snapshot.data!;
+        return ChangeNotifierProvider.value(
+          value: viewModel,
+          child: MaterialApp(
+            title: 'StackTasks',
+            theme: AppTheme.darkTheme,
+            debugShowCheckedModeBanner: false,
+            home: const StackScreen(),
+          ),
+        );
+      },
     );
   }
 
@@ -39,6 +52,9 @@ class StackTasksApp extends StatelessWidget {
     final dbHelper = DatabaseHelper.instance;
     final db = await dbHelper.database;
     final repository = StackRepository(database: db);
-    return StackViewModel(repository: repository);
+    final vm = StackViewModel(repository: repository);
+    await vm.loadCards();
+    return vm;
   }
 }
+
