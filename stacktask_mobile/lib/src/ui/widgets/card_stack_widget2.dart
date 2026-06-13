@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:stacktask_mobile/src/core/models/task_card.dart';
 import 'package:stacktask_mobile/src/core/models/task_tag.dart';
 import 'package:stacktask_mobile/src/core/theme/app_theme.dart';
+import 'package:stacktask_mobile/src/ui/widgets/card_stack_controller.dart';
 import 'package:stacktask_mobile/src/ui/widgets/tag_pill_widget.dart';
 
-class CardStackWidget2 extends StatelessWidget {
+class CardStackWidget2 extends StatefulWidget {
   final List<TaskCard> cards;
   final int? peekedIndex;
   final ValueChanged<int> onCardTap;
@@ -24,21 +25,34 @@ class CardStackWidget2 extends StatelessWidget {
     this.onMoveCard,
   });
 
+  @override
+  State<CardStackWidget2> createState() => _CardStackWidget2State();
+}
+
+class _CardStackWidget2State extends State<CardStackWidget2> {
   static const double _cardSpacing = 40.0;
   static const double _bottomPadding = 80.0;
 
+  final CardStackController _controller = CardStackController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (cards.isEmpty) return const SizedBox.shrink();
+    if (widget.cards.isEmpty) return const SizedBox.shrink();
 
-    final totalCards = cards.length;
+    final totalCards = widget.cards.length;
+    final controller = _controller;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final cardWidth = constraints.maxWidth * 0.88;
         final cardLeft = (constraints.maxWidth - cardWidth) / 2;
-        final stackHeight =
-            _bottomPadding + (totalCards * _cardSpacing) + 320;
+        final stackHeight = _bottomPadding + (totalCards * _cardSpacing) + 320;
 
         return SizedBox(
           height: stackHeight,
@@ -51,16 +65,91 @@ class CardStackWidget2 extends StatelessWidget {
                   left: cardLeft,
                   child: SizedBox(
                     width: cardWidth,
-                    child: GestureDetector(
-                      onTap: () => onCardTap(i),
-                      child: _buildCard(cards[i]),
-                    ),
+                    child: i == 0
+                        ? _buildFrontCard(widget.cards[0], controller)
+                        : _buildBackgroundCard(widget.cards[i], i),
                   ),
                 ),
             ],
           ),
         );
       },
+    );
+  }
+
+  Widget _buildFrontCard(TaskCard card, CardStackController controller) {
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final target = controller.isSwipingOut
+            ? controller.swipeOutTarget
+            : controller.frontOffset;
+
+        return GestureDetector(
+          onHorizontalDragStart: (_) => controller.onFrontDragStart(),
+          onHorizontalDragUpdate: (d) => controller.onFrontDragUpdate(d.delta),
+          onHorizontalDragEnd: (d) => _handleFrontDragEnd(d, controller),
+          onVerticalDragStart: (_) => controller.onFrontDragStart(),
+          onVerticalDragUpdate: (d) => controller.onFrontDragUpdate(d.delta),
+          onVerticalDragEnd: (d) => _handleFrontDragEnd(d, controller),
+          child: TweenAnimationBuilder<Offset>(
+            tween: Tween<Offset>(begin: target, end: target),
+            duration: controller.isSwipingOut
+                ? CardStackController.swipeOutDuration
+                : const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            builder: (context, animatedOffset, child) {
+              return Opacity(
+                opacity: controller.isSwipingOut ? 0.0 : 1.0,
+                child: Transform.translate(
+                  offset: animatedOffset,
+                  child: child,
+                ),
+              );
+            },
+            child: _buildCard(card),
+          ),
+        );
+      },
+    );
+  }
+
+  void _handleFrontDragEnd(
+    DragEndDetails details,
+    CardStackController controller,
+  ) {
+    final result = controller.onFrontDragEnd(details.velocity.pixelsPerSecond);
+    if (result == FrontDragResult.none) return;
+
+    final direction = switch (result) {
+      FrontDragResult.swipeLeft => SwipeOutDirection.left,
+      FrontDragResult.swipeRight => SwipeOutDirection.right,
+      FrontDragResult.swipeDown => SwipeOutDirection.down,
+      FrontDragResult.none => SwipeOutDirection.none,
+    };
+
+    controller.beginSwipeOut(direction);
+
+    Future.delayed(CardStackController.swipeOutDuration, () {
+      if (!mounted) return;
+      controller.completeSwipeOut();
+      switch (direction) {
+        case SwipeOutDirection.left:
+          widget.onSwipeLeft?.call();
+        case SwipeOutDirection.right:
+          widget.onSwipeRight?.call();
+        case SwipeOutDirection.down:
+          widget.onFrontSwipeDown?.call();
+        case SwipeOutDirection.none:
+          break;
+      }
+    });
+  }
+
+  Widget _buildBackgroundCard(TaskCard card, int index) {
+    return GestureDetector(
+      onTap: () => widget.onCardTap(index),
+      child: _buildCard(card),
     );
   }
 
@@ -130,3 +219,4 @@ class CardStackWidget2 extends StatelessWidget {
     );
   }
 }
+

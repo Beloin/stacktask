@@ -141,10 +141,8 @@ class _CardArea extends StatelessWidget {
                           vm.peek(index);
                         }
                       },
-                      onSwipeLeft: () =>
-                          vm.dismissCard(SwipeDirection.left),
-                      onSwipeRight: () =>
-                          vm.dismissCard(SwipeDirection.right),
+                      onSwipeLeft: () => vm.dismissCard(SwipeDirection.left),
+                      onSwipeRight: () => vm.dismissCard(SwipeDirection.right),
                       onFrontSwipeDown: () => vm.cycleFrontToEnd(),
                       onMoveCard: (from, to) => vm.moveCardTo(from, to),
                     ),
@@ -210,4 +208,3 @@ class _FabArea extends StatelessWidget {
     });
   }
 }
-
