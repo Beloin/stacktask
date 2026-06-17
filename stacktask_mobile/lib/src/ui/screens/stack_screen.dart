@@ -133,14 +133,6 @@ class _CardArea extends StatelessWidget {
                   ? const EmptyStateWidget()
                   : CardStackWidget2(
                       cards: vm.cards,
-                      peekedIndex: vm.peekedIndex,
-                      onCardTap: (index) {
-                        if (vm.peekedIndex == index) {
-                          vm.clearPeek();
-                        } else {
-                          vm.peek(index);
-                        }
-                      },
                       onSwipeLeft: () => vm.dismissCard(SwipeDirection.left),
                       onSwipeRight: () => vm.dismissCard(SwipeDirection.right),
                       onFrontSwipeDown: () => vm.cycleFrontToEnd(),
@@ -175,32 +167,36 @@ class _FabArea extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: const BoxDecoration(color: Colors.black54),
-        child: DraggableScrollableSheet(
-          initialChildSize: 0.7,
-          minChildSize: 0.5,
-          maxChildSize: 0.9,
-          builder: (context, scrollController) {
-            return AddTaskModal(
-              onSubmit:
-                  ({
-                    required title,
-                    required tag,
-                    description = '',
-                    timeEstimate,
-                    priority = 1,
-                  }) {
-                    vm.addCard(
-                      title: title,
-                      tag: tag,
-                      description: description,
-                      timeEstimate: timeEstimate,
-                      priority: priority,
-                    );
-                  },
-            );
-          },
+      builder: (modalContext) => GestureDetector(
+        onTap: () => Navigator.of(modalContext).pop(),
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          color: Colors.black54,
+          child: DraggableScrollableSheet(
+            initialChildSize: 0.7,
+            minChildSize: 0.5,
+            maxChildSize: 0.9,
+            builder: (context, scrollController) {
+              return AddTaskModal(
+                onSubmit:
+                    ({
+                      required title,
+                      required tag,
+                      description = '',
+                      timeEstimate,
+                      priority = 1,
+                    }) {
+                      vm.addCard(
+                        title: title,
+                        tag: tag,
+                        description: description,
+                        timeEstimate: timeEstimate,
+                        priority: priority,
+                      );
+                    },
+              );
+            },
+          ),
         ),
       ),
     ).whenComplete(() {

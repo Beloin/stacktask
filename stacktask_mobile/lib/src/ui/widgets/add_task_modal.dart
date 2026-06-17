@@ -54,10 +54,11 @@ class _AddTaskModalState extends State<AddTaskModal> {
         color: AppColors.modalBackground,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          const SizedBox(height: 12),
           Container(
             width: 40,
             height: 4,
@@ -66,109 +67,140 @@ class _AddTaskModalState extends State<AddTaskModal> {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          const SizedBox(height: 20),
-          Text(
-            'New Task',
-            style: Theme.of(context).textTheme.headlineMedium,
-          ),
-          const SizedBox(height: 20),
-          _buildTextField(
-            controller: _titleController,
-            hint: 'Task title',
-          ),
-          const SizedBox(height: 12),
-          _buildTextField(
-            controller: _descriptionController,
-            hint: 'Description (optional)',
-            maxLines: 3,
-          ),
-          const SizedBox(height: 12),
-          _buildTextField(
-            controller: _timeController,
-            hint: 'Time estimate (e.g. 2h, 30m)',
-          ),
-          const SizedBox(height: 16),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'Tag',
-              style: TextStyle(
-                color: AppColors.textMuted,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'New Task',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: 20),
+                  _buildTextField(
+                    controller: _titleController,
+                    hint: 'Task title',
+                  ),
+                  const SizedBox(height: 12),
+                  _buildTextField(
+                    controller: _descriptionController,
+                    hint: 'Description (optional)',
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildTextField(
+                    controller: _timeController,
+                    hint: 'Time estimate (e.g. 2h, 30m)',
+                  ),
+                  const SizedBox(height: 16),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Tag',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: TaskTag.values.map((tag) {
+                      final isSelected = tag == _selectedTag;
+                      return GestureDetector(
+                        onTap: () => setState(() => _selectedTag = tag),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: tag.backgroundColor,
+                            borderRadius: BorderRadius.circular(10),
+                            border: isSelected
+                                ? Border.all(color: Colors.white, width: 2)
+                                : null,
+                          ),
+                          child: Text(
+                            tag.displayName,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: tag.color,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Priority',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: List.generate(4, (index) {
+                      final level = index + 1;
+                      final isActive = level <= _priority;
+                      return GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => setState(() => _priority = level),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 8,
+                          ),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            width: 24,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: isActive
+                                  ? AppColors.accent
+                                  : Colors.white.withValues(alpha: 0.12),
+                              shape: BoxShape.circle,
+                              border: isActive
+                                  ? null
+                                  : Border.all(
+                                      color: Colors.white
+                                          .withValues(alpha: 0.2),
+                                      width: 1,
+                                    ),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              '$level',
+                              style: TextStyle(
+                                color: isActive
+                                    ? Colors.white
+                                    : Colors.white.withValues(alpha: 0.5),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                ],
               ),
             ),
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: TaskTag.values.map((tag) {
-              final isSelected = tag == _selectedTag;
-              return GestureDetector(
-                onTap: () => setState(() => _selectedTag = tag),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: tag.backgroundColor,
-                    borderRadius: BorderRadius.circular(10),
-                    border: isSelected
-                        ? Border.all(color: Colors.white, width: 2)
-                        : null,
-                  ),
-                  child: Text(
-                    tag.displayName,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: tag.color,
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
           const SizedBox(height: 16),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'Priority',
-              style: TextStyle(
-                color: AppColors.textMuted,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: List.generate(4, (index) {
-              final level = index + 1;
-              final isActive = level <= _priority;
-              return GestureDetector(
-                onTap: () => setState(() => _priority = level),
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: isActive ? 10 : 8,
-                    height: isActive ? 10 : 8,
-                    decoration: BoxDecoration(
-                      color: isActive
-                          ? AppColors.accent
-                          : Colors.white.withValues(alpha: 0.08),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-              );
-            }),
-          ),
-          const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(

@@ -7,8 +7,6 @@ import 'package:stacktask_mobile/src/ui/widgets/tag_pill_widget.dart';
 
 class CardStackWidget2 extends StatefulWidget {
   final List<TaskCard> cards;
-  final int? peekedIndex;
-  final ValueChanged<int> onCardTap;
   final VoidCallback? onSwipeLeft;
   final VoidCallback? onSwipeRight;
   final VoidCallback? onFrontSwipeDown;
@@ -17,8 +15,6 @@ class CardStackWidget2 extends StatefulWidget {
   const CardStackWidget2({
     super.key,
     required this.cards,
-    this.peekedIndex,
-    required this.onCardTap,
     this.onSwipeLeft,
     this.onSwipeRight,
     this.onFrontSwipeDown,
@@ -67,7 +63,7 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
                     width: cardWidth,
                     child: i == 0
                         ? _buildFrontCard(widget.cards[0], controller)
-                        : _buildBackgroundCard(widget.cards[i], i),
+                        : _buildBackgroundCard(widget.cards[i], i, controller),
                   ),
                 ),
             ],
@@ -84,6 +80,11 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
         final target = controller.isSwipingOut
             ? controller.swipeOutTarget
             : controller.frontOffset;
+        final isSelected = controller.isSelected(0);
+        final isBypassed = controller.isBypassed(0);
+        final selectedHasOffset =
+            isSelected && controller.selectedOffset != Offset.zero;
+        final opacity = isBypassed ? 0.4 : 1.0;
 
         return GestureDetector(
           onHorizontalDragStart: (_) => controller.onFrontDragStart(),
@@ -92,6 +93,10 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
           onVerticalDragStart: (_) => controller.onFrontDragStart(),
           onVerticalDragUpdate: (d) => controller.onFrontDragUpdate(d.delta),
           onVerticalDragEnd: (d) => _handleFrontDragEnd(d, controller),
+          onLongPressStart: (_) => controller.select(0),
+          onLongPressMoveUpdate: (d) =>
+              controller.onSelectedDragUpdate(d.offsetFromOrigin),
+          onLongPressEnd: (_) => _handleSelectedDragEnd(controller),
           child: TweenAnimationBuilder<Offset>(
             tween: Tween<Offset>(begin: target, end: target),
             duration: controller.isSwipingOut
@@ -100,14 +105,26 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
             curve: Curves.easeOut,
             builder: (context, animatedOffset, child) {
               return Opacity(
-                opacity: controller.isSwipingOut ? 0.0 : 1.0,
+                opacity: controller.isSwipingOut
+                    ? 0.0
+                    : isSelected
+                    ? 1.0
+                    : opacity,
                 child: Transform.translate(
-                  offset: animatedOffset,
-                  child: child,
+                  offset: isSelected
+                      ? controller.selectedOffset
+                      : animatedOffset,
+                  child: Transform.scale(
+                    scale: isSelected ? 1.05 : 1.0,
+                    child: child,
+                  ),
                 ),
               );
             },
-            child: _buildCard(card),
+            child: _buildCardShell(
+              card,
+              showSelectionBorder: selectedHasOffset,
+            ),
           ),
         );
       },
@@ -146,19 +163,65 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
     });
   }
 
-  Widget _buildBackgroundCard(TaskCard card, int index) {
-    return GestureDetector(
-      onTap: () => widget.onCardTap(index),
-      child: _buildCard(card),
+  void _handleSelectedDragEnd(CardStackController controller) {
+    final from = controller.selectedIndex;
+    final to = controller.bypassedIndex;
+    controller.onSelectedDragEnd();
+    if (from != null && to != null && from != to) {
+      widget.onMoveCard?.call(from, to);
+    }
+  }
+
+  Widget _buildBackgroundCard(
+    TaskCard card,
+    int index,
+    CardStackController controller,
+  ) {
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final isSelected = controller.isSelected(index);
+        final isBypassed = controller.isBypassed(index);
+        final selectedHasOffset =
+            isSelected && controller.selectedOffset != Offset.zero;
+        final opacity = isBypassed ? 0.4 : 1.0;
+
+        return GestureDetector(
+          onLongPressStart: (_) => controller.select(index),
+          onLongPressMoveUpdate: (d) =>
+              controller.onSelectedDragUpdate(d.offsetFromOrigin),
+          onLongPressEnd: (_) => _handleSelectedDragEnd(controller),
+          child: AnimatedScale(
+            scale: isSelected ? 1.05 : 1.0,
+            duration: const Duration(milliseconds: 200),
+            child: Transform.translate(
+              offset: isSelected ? controller.selectedOffset : Offset.zero,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 200),
+                opacity: opacity,
+                child: _buildCardShell(
+                  card,
+                  showSelectionBorder: selectedHasOffset,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildCard(TaskCard card) {
-    final tag = TaskTag.fromName(card.tag);
+  Widget _buildCardShell(TaskCard card, {bool showSelectionBorder = false}) {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.cardSurface,
         borderRadius: BorderRadius.circular(20),
+        border: showSelectionBorder
+            ? Border.all(
+                color: AppColors.accent.withValues(alpha: 0.6),
+                width: 2,
+              )
+            : null,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.18),
@@ -167,6 +230,13 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
           ),
         ],
       ),
+      child: _buildCardBody(card),
+    );
+  }
+
+  Widget _buildCardBody(TaskCard card) {
+    final tag = TaskTag.fromName(card.tag);
+    return Padding(
       padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -212,6 +282,23 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
                   color: AppColors.textSecondary,
                 ),
               ),
+              const Spacer(),
+              ...List.generate(4, (index) {
+                final isActive = index < card.priority;
+                return Padding(
+                  padding: const EdgeInsets.only(left: 4),
+                  child: Container(
+                    width: isActive ? 8 : 6,
+                    height: isActive ? 8 : 6,
+                    decoration: BoxDecoration(
+                      color: isActive
+                          ? AppColors.accent
+                          : AppColors.textSecondary.withValues(alpha: 0.25),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                );
+              }),
             ],
           ),
         ],
@@ -219,4 +306,3 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
     );
   }
 }
-

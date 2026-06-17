@@ -33,6 +33,86 @@ class CardStackController extends ChangeNotifier {
     }
   }
 
+  int? _selectedIndex;
+  int? get selectedIndex => _selectedIndex;
+  bool isSelected(int index) => _selectedIndex == index;
+
+  int? _bypassedIndex;
+  int? get bypassedIndex => _bypassedIndex;
+  bool isBypassed(int index) {
+    if (_selectedIndex == null || _bypassedIndex == null) return false;
+    if (_bypassedIndex == _selectedIndex) return false;
+    final lo = _selectedIndex! < _bypassedIndex!
+        ? _selectedIndex!
+        : _bypassedIndex!;
+    final hi = _selectedIndex! < _bypassedIndex!
+        ? _bypassedIndex!
+        : _selectedIndex!;
+    return index >= lo && index <= hi;
+  }
+
+  double _selectedDragX = 0;
+  double _selectedDragY = 0;
+  double get selectedDragX => _selectedDragX;
+  double get selectedDragY => _selectedDragY;
+  Offset get selectedOffset => Offset(_selectedDragX, _selectedDragY);
+
+  void select(int index) {
+    if (_isSwipingOut) return;
+    _selectedIndex = index;
+    _bypassedIndex = index;
+    _selectedDragX = 0;
+    _selectedDragY = 0;
+    notifyListeners();
+  }
+
+  void clearSelection() {
+    if (_selectedIndex == null) return;
+    _selectedIndex = null;
+    _bypassedIndex = null;
+    _selectedDragX = 0;
+    _selectedDragY = 0;
+    notifyListeners();
+  }
+
+  void onSelectedDragStart() {
+    if (_selectedIndex == null) return;
+    _selectedDragX = 0;
+    _selectedDragY = 0;
+    notifyListeners();
+  }
+
+  void onSelectedDragUpdate(Offset offsetFromOrigin) {
+    if (_selectedIndex == null) return;
+    _selectedDragX = offsetFromOrigin.dx;
+    _selectedDragY = offsetFromOrigin.dy;
+    _bypassedIndex = _calcBypassedIndex();
+    notifyListeners();
+  }
+
+  int? _calcBypassedIndex() {
+    if (_selectedIndex == null) return _selectedIndex;
+    final from = _selectedIndex!;
+    // Each card slot is _cardSpacing pixels apart vertically.
+    // Dragging up (negative Y) past -_cardSpacing moves the card up by 1 slot.
+    // Dragging down (positive Y) past _cardSpacing moves the card down by 1 slot.
+    const cardSpacing = 40.0;
+    final steps = (-_selectedDragY / cardSpacing).floor();
+    if (steps == 0) return from;
+    final target = from + steps;
+    if (target < 0) return 0;
+    return target;
+  }
+
+  void onSelectedDragEnd() {
+    if (_selectedIndex == null) return;
+    _selectedDragX = 0;
+    _selectedDragY = 0;
+    _selectedIndex = null;
+    _bypassedIndex = null;
+    notifyListeners();
+  }
+
   void onFrontDragStart() {
     if (_isSwipingOut) return;
     _frontDragX = 0;
@@ -71,18 +151,12 @@ class CardStackController extends ChangeNotifier {
     return result;
   }
 
-  /// Begin the swipe-out animation. The card flies off-screen in the given
-  /// direction; the widget should call [completeSwipeOut] after the animation
-  /// finishes to actually dismiss/cycle the card via the ViewModel callback.
   void beginSwipeOut(SwipeOutDirection direction) {
     _isSwipingOut = true;
     _swipeOutDirection = direction;
     notifyListeners();
   }
 
-  /// Called by the widget when the animation completes. Resets swipe-out state
-  /// and returns the original swipe direction so the caller knows which
-  /// ViewModel action to fire.
   SwipeOutDirection completeSwipeOut() {
     final dir = _swipeOutDirection;
     _isSwipingOut = false;
@@ -96,6 +170,10 @@ class CardStackController extends ChangeNotifier {
     _frontDragY = 0;
     _isSwipingOut = false;
     _swipeOutDirection = SwipeOutDirection.none;
+    _selectedIndex = null;
+    _bypassedIndex = null;
+    _selectedDragX = 0;
+    _selectedDragY = 0;
     notifyListeners();
   }
 }

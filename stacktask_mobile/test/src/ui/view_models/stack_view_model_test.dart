@@ -53,7 +53,6 @@ void main() {
       expect(viewModel.isEmpty, isTrue);
       expect(viewModel.count, 0);
       expect(viewModel.frontCard, isNull);
-      expect(viewModel.peekedIndex, isNull);
       expect(viewModel.isModalOpen, isFalse);
       expect(viewModel.hasError, isFalse);
     });
@@ -119,63 +118,12 @@ void main() {
       expect(viewModel.count, 3);
     });
 
-    test('peek sets and toggles peekedIndex', () async {
-      await viewModel.addCard(title: 'A', tag: 'dev');
-      await viewModel.addCard(title: 'B', tag: 'dev');
-      viewModel.peek(1);
-      expect(viewModel.peekedIndex, 1);
-      viewModel.peek(1);
-      expect(viewModel.peekedIndex, isNull);
-    });
-
-    test('clearPeek resets peekedIndex', () async {
-      await viewModel.addCard(title: 'A', tag: 'dev');
-      await viewModel.addCard(title: 'B', tag: 'dev');
-      await viewModel.addCard(title: 'C', tag: 'dev');
-      viewModel.peek(2);
-      expect(viewModel.peekedIndex, 2);
-      viewModel.clearPeek();
-      expect(viewModel.peekedIndex, isNull);
-    });
-
     test('openModal and closeModal toggle state', () {
       expect(viewModel.isModalOpen, isFalse);
       viewModel.openModal();
       expect(viewModel.isModalOpen, isTrue);
       viewModel.closeModal();
       expect(viewModel.isModalOpen, isFalse);
-    });
-
-    test('dismissCard clears peekedIndex', () async {
-      await viewModel.addCard(title: 'A', tag: 'dev');
-      await viewModel.addCard(title: 'B', tag: 'dev');
-      viewModel.peek(1);
-      expect(viewModel.peekedIndex, 1);
-      await viewModel.dismissCard(SwipeDirection.left);
-      expect(viewModel.peekedIndex, isNull);
-    });
-
-    test('promoteToFront clears peekedIndex', () async {
-      await viewModel.addCard(title: 'A', tag: 'dev');
-      await viewModel.addCard(title: 'B', tag: 'dev');
-      viewModel.peek(1);
-      await viewModel.promoteToFront(1);
-      expect(viewModel.peekedIndex, isNull);
-    });
-
-    test('addCard clears peekedIndex', () async {
-      await viewModel.addCard(title: 'A', tag: 'dev');
-      viewModel.peek(0);
-      expect(viewModel.peekedIndex, 0);
-      await viewModel.addCard(title: 'B', tag: 'dev');
-      expect(viewModel.peekedIndex, isNull);
-    });
-
-    test('peek with invalid index is ignored', () {
-      viewModel.peek(5);
-      expect(viewModel.peekedIndex, isNull);
-      viewModel.peek(-1);
-      expect(viewModel.peekedIndex, isNull);
     });
 
     test('clearError resets lastError', () async {
@@ -190,16 +138,6 @@ void main() {
       await viewModel.addCard(title: 'C', tag: 'dev');
       await viewModel.moveCardTo(2, 0);
       expect(viewModel.cards[0].title, 'A');
-    });
-
-    test('moveCardTo clears peekedIndex', () async {
-      await viewModel.addCard(title: 'A', tag: 'dev');
-      await viewModel.addCard(title: 'B', tag: 'dev');
-      await viewModel.addCard(title: 'C', tag: 'dev');
-      viewModel.peek(2);
-      expect(viewModel.peekedIndex, 2);
-      await viewModel.moveCardTo(2, 0);
-      expect(viewModel.peekedIndex, isNull);
     });
   });
 }
