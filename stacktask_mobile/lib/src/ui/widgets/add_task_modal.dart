@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stacktask_mobile/src/core/models/task_card.dart';
 import 'package:stacktask_mobile/src/core/models/task_tag.dart';
 import 'package:stacktask_mobile/src/core/theme/app_theme.dart';
 
@@ -12,18 +13,34 @@ class AddTaskModal extends StatefulWidget {
   })
       onSubmit;
 
-  const AddTaskModal({super.key, required this.onSubmit});
+  final TaskCard? editing;
+
+  const AddTaskModal({super.key, required this.onSubmit, this.editing});
 
   @override
   State<AddTaskModal> createState() => _AddTaskModalState();
 }
 
 class _AddTaskModalState extends State<AddTaskModal> {
-  final _titleController = TextEditingController();
-  final _descriptionController = TextEditingController();
-  final _timeController = TextEditingController();
-  TaskTag _selectedTag = TaskTag.dev;
-  int _priority = 1;
+  late final TextEditingController _titleController;
+  late final TextEditingController _descriptionController;
+  late final TextEditingController _timeController;
+  late TaskTag _selectedTag;
+  late int _priority;
+
+  bool get _isEditing => widget.editing != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.editing;
+    _titleController = TextEditingController(text: e?.title ?? '');
+    _descriptionController =
+        TextEditingController(text: e?.description ?? '');
+    _timeController = TextEditingController(text: e?.timeEstimate ?? '');
+    _selectedTag = e != null ? TaskTag.fromName(e.tag) : TaskTag.dev;
+    _priority = e?.priority ?? 1;
+  }
 
   @override
   void dispose() {
@@ -49,26 +66,13 @@ class _AddTaskModalState extends State<AddTaskModal> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.modalBackground,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: const EdgeInsets.all(24),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: const Color(0x33FFFFFF),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: 20),
           Text(
-            'New Task',
+            _isEditing ? 'Edit Task' : 'New Task',
             style: Theme.of(context).textTheme.headlineMedium,
           ),
           const SizedBox(height: 20),
@@ -150,18 +154,39 @@ class _AddTaskModalState extends State<AddTaskModal> {
               final level = index + 1;
               final isActive = level <= _priority;
               return GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTap: () => setState(() => _priority = level),
                 child: Padding(
-                  padding: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 8,
+                  ),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
-                    width: isActive ? 10 : 8,
-                    height: isActive ? 10 : 8,
+                    width: 24,
+                    height: 24,
                     decoration: BoxDecoration(
                       color: isActive
                           ? AppColors.accent
-                          : Colors.white.withValues(alpha: 0.08),
+                          : Colors.white.withValues(alpha: 0.12),
                       shape: BoxShape.circle,
+                      border: isActive
+                          ? null
+                          : Border.all(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              width: 1,
+                            ),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '$level',
+                      style: TextStyle(
+                        color: isActive
+                            ? Colors.white
+                            : Colors.white.withValues(alpha: 0.5),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),
@@ -180,9 +205,9 @@ class _AddTaskModalState extends State<AddTaskModal> {
                 ),
                 backgroundColor: AppColors.accent,
               ),
-              child: const Text(
-                'Add to Stack',
-                style: TextStyle(
+              child: Text(
+                _isEditing ? 'Save Changes' : 'Add to Stack',
+                style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
                   color: Colors.white,
@@ -190,7 +215,6 @@ class _AddTaskModalState extends State<AddTaskModal> {
               ),
             ),
           ),
-          const SizedBox(height: 24),
         ],
       ),
     );

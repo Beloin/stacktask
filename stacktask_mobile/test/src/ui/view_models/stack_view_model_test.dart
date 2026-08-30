@@ -15,6 +15,7 @@ Future<Database> _createTestDatabase() async {
       tag TEXT NOT NULL,
       time_estimate TEXT,
       priority INTEGER NOT NULL DEFAULT 1,
+        is_done INTEGER NOT NULL DEFAULT 0,
       position INTEGER NOT NULL,
       created_at TEXT NOT NULL
     )
@@ -53,7 +54,6 @@ void main() {
       expect(viewModel.isEmpty, isTrue);
       expect(viewModel.count, 0);
       expect(viewModel.frontCard, isNull);
-      expect(viewModel.peekedIndex, isNull);
       expect(viewModel.isModalOpen, isFalse);
       expect(viewModel.hasError, isFalse);
     });
@@ -119,63 +119,12 @@ void main() {
       expect(viewModel.count, 3);
     });
 
-    test('peek sets and toggles peekedIndex', () async {
-      await viewModel.addCard(title: 'A', tag: 'dev');
-      await viewModel.addCard(title: 'B', tag: 'dev');
-      viewModel.peek(1);
-      expect(viewModel.peekedIndex, 1);
-      viewModel.peek(1);
-      expect(viewModel.peekedIndex, isNull);
-    });
-
-    test('clearPeek resets peekedIndex', () async {
-      await viewModel.addCard(title: 'A', tag: 'dev');
-      await viewModel.addCard(title: 'B', tag: 'dev');
-      await viewModel.addCard(title: 'C', tag: 'dev');
-      viewModel.peek(2);
-      expect(viewModel.peekedIndex, 2);
-      viewModel.clearPeek();
-      expect(viewModel.peekedIndex, isNull);
-    });
-
     test('openModal and closeModal toggle state', () {
       expect(viewModel.isModalOpen, isFalse);
       viewModel.openModal();
       expect(viewModel.isModalOpen, isTrue);
       viewModel.closeModal();
       expect(viewModel.isModalOpen, isFalse);
-    });
-
-    test('dismissCard clears peekedIndex', () async {
-      await viewModel.addCard(title: 'A', tag: 'dev');
-      await viewModel.addCard(title: 'B', tag: 'dev');
-      viewModel.peek(1);
-      expect(viewModel.peekedIndex, 1);
-      await viewModel.dismissCard(SwipeDirection.left);
-      expect(viewModel.peekedIndex, isNull);
-    });
-
-    test('promoteToFront clears peekedIndex', () async {
-      await viewModel.addCard(title: 'A', tag: 'dev');
-      await viewModel.addCard(title: 'B', tag: 'dev');
-      viewModel.peek(1);
-      await viewModel.promoteToFront(1);
-      expect(viewModel.peekedIndex, isNull);
-    });
-
-    test('addCard clears peekedIndex', () async {
-      await viewModel.addCard(title: 'A', tag: 'dev');
-      viewModel.peek(0);
-      expect(viewModel.peekedIndex, 0);
-      await viewModel.addCard(title: 'B', tag: 'dev');
-      expect(viewModel.peekedIndex, isNull);
-    });
-
-    test('peek with invalid index is ignored', () {
-      viewModel.peek(5);
-      expect(viewModel.peekedIndex, isNull);
-      viewModel.peek(-1);
-      expect(viewModel.peekedIndex, isNull);
     });
 
     test('clearError resets lastError', () async {
@@ -192,14 +141,55 @@ void main() {
       expect(viewModel.cards[0].title, 'A');
     });
 
-    test('moveCardTo clears peekedIndex', () async {
-      await viewModel.addCard(title: 'A', tag: 'dev');
-      await viewModel.addCard(title: 'B', tag: 'dev');
-      await viewModel.addCard(title: 'C', tag: 'dev');
-      viewModel.peek(2);
-      expect(viewModel.peekedIndex, 2);
-      await viewModel.moveCardTo(2, 0);
-      expect(viewModel.peekedIndex, isNull);
+    test('markCardAsDone removes card from active stack and marks it done',
+        () async {
+      await viewModel.addCard(title: 'To complete', tag: 'dev');
+      expect(viewModel.count, 1);
+      expect(viewModel.cards[0].isDone, isFalse);
+      await viewModel.markCardAsDone(0);
+      expect(viewModel.count, 0);
+    });
+
+    test('markCardAsDone on invalid index is a no-op', () async {
+      await viewModel.addCard(title: 'X', tag: 'dev');
+      await viewModel.markCardAsDone(99);
+      expect(viewModel.count, 1);
+      await viewModel.markCardAsDone(-1);
+      expect(viewModel.count, 1);
+    });
+
+    test('updateCard changes fields in place and keeps id', () async {
+      await viewModel.addCard(
+        title: 'Original',
+        tag: 'dev',
+        description: 'old',
+        priority: 1,
+      );
+      final originalId = viewModel.cards[0].id;
+      final originalCreatedAt = viewModel.cards[0].createdAt;
+      await viewModel.updateCard(
+        id: originalId,
+        title: 'Edited',
+        tag: 'review',
+        description: 'new',
+        priority: 4,
+      );
+      expect(viewModel.cards[0].title, 'Edited');
+      expect(viewModel.cards[0].tag, 'review');
+      expect(viewModel.cards[0].description, 'new');
+      expect(viewModel.cards[0].priority, 4);
+      expect(viewModel.cards[0].id, originalId);
+      expect(viewModel.cards[0].createdAt, originalCreatedAt);
+    });
+
+    test('updateCard with unknown id is a no-op', () async {
+      await viewModel.addCard(title: 'X', tag: 'dev');
+      await viewModel.updateCard(
+        id: 'does-not-exist',
+        title: 'whatever',
+        tag: 'dev',
+      );
+      expect(viewModel.cards[0].title, 'X');
     });
   });
 }

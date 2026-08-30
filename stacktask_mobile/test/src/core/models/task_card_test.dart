@@ -34,6 +34,7 @@ void main() {
       expect(minimal.description, '');
       expect(minimal.timeEstimate, isNull);
       expect(minimal.priority, 1);
+      expect(minimal.isDone, isFalse);
     });
 
     test('copyWith returns new instance with updated fields', () {
@@ -61,6 +62,37 @@ void main() {
       expect(restored.description, card.description);
       expect(restored.timeEstimate, card.timeEstimate);
       expect(restored.priority, card.priority);
+      expect(restored.isDone, card.isDone);
+    });
+
+    test('copyWith can flip isDone', () {
+      final done = card.copyWith(isDone: true);
+      expect(done.isDone, isTrue);
+      expect(card.isDone, isFalse);
+    });
+
+    test('toMap serializes isDone as 1 or 0', () {
+      expect(card.toMap()['is_done'], 0);
+      expect(card.copyWith(isDone: true).toMap()['is_done'], 1);
+    });
+
+    test('fromMap reads is_done from int', () {
+      final fromTrue = TaskCard.fromMap({
+        ...card.toMap(),
+        'is_done': 1,
+      });
+      expect(fromTrue.isDone, isTrue);
+      final fromFalse = TaskCard.fromMap({
+        ...card.toMap(),
+        'is_done': 0,
+      });
+      expect(fromFalse.isDone, isFalse);
+    });
+
+    test('fromMap defaults isDone to false when column missing', () {
+      final map = card.toMap()..remove('is_done');
+      final restored = TaskCard.fromMap(map);
+      expect(restored.isDone, isFalse);
     });
 
     test('equality works for identical cards', () {
@@ -68,6 +100,9 @@ void main() {
         id: 'test-id-1',
         title: 'Fix login bug',
         tag: 'bug',
+        description: 'Users cannot log in on iOS',
+        timeEstimate: '2h',
+        priority: 2,
         createdAt: now,
       );
       expect(card, equals(same));
@@ -83,6 +118,9 @@ void main() {
         id: 'test-id-1',
         title: 'Fix login bug',
         tag: 'bug',
+        description: 'Users cannot log in on iOS',
+        timeEstimate: '2h',
+        priority: 2,
         createdAt: now,
       );
       expect(card.hashCode, same.hashCode);

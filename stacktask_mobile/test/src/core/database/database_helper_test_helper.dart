@@ -11,6 +11,7 @@ Future<Database> createTestDatabase() async {
       tag TEXT NOT NULL,
       time_estimate TEXT,
       priority INTEGER NOT NULL DEFAULT 1,
+        is_done INTEGER NOT NULL DEFAULT 0,
       position INTEGER NOT NULL,
       created_at TEXT NOT NULL
     )

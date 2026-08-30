@@ -13,7 +13,6 @@ class StackViewModel extends ChangeNotifier {
   final StackRepository _repository;
   final Uuid _uuid;
 
-  int? _peekedIndex;
   bool _isModalOpen = false;
   bool _isLoading = false;
   ErrorCode? _lastError;
@@ -30,7 +29,6 @@ class StackViewModel extends ChangeNotifier {
   int get count => _service.count;
   bool get isEmpty => _service.isEmpty;
   TaskCard? get frontCard => _service.peek;
-  int? get peekedIndex => _peekedIndex;
   bool get isModalOpen => _isModalOpen;
   bool get isLoading => _isLoading;
   ErrorCode? get lastError => _lastError;
@@ -83,7 +81,6 @@ class StackViewModel extends ChangeNotifier {
       createdAt: DateTime.now(),
     );
     _service.push(card);
-    _peekedIndex = null;
     notifyListeners();
 
     final saveResult = await _repository.saveCard(card, 0);
@@ -103,7 +100,6 @@ class StackViewModel extends ChangeNotifier {
   Future<void> dismissCard(SwipeDirection direction) async {
     final card = _service.pop();
     if (card == null) return;
-    _peekedIndex = null;
     notifyListeners();
 
     final deleteResult = await _repository.deleteCard(card.id);
@@ -124,7 +120,6 @@ class StackViewModel extends ChangeNotifier {
     final card = _service.cardAt(index);
     if (card == null) return;
     _service.removeAt(index);
-    _peekedIndex = null;
     notifyListeners();
 
     final deleteResult = await _repository.deleteCard(card.id);
@@ -143,7 +138,6 @@ class StackViewModel extends ChangeNotifier {
 
   Future<void> promoteToFront(int index) async {
     _service.promoteToFront(index);
-    _peekedIndex = null;
     notifyListeners();
 
     final result = await _repository.syncPositions(_service.all);
@@ -155,19 +149,68 @@ class StackViewModel extends ChangeNotifier {
 
   Future<void> moveCardTo(int fromIndex, int toIndex) async {
     _service.moveCardTo(fromIndex, toIndex);
-    _peekedIndex = null;
     notifyListeners();
 
     final result = await _repository.syncPositions(_service.all);
     if (result case Failure(:final error)) {
       _lastError = error;
       notifyListeners();
+    }
+  }
+
+  Future<void> updateCard({
+    required String id,
+    required String title,
+    required String tag,
+    String description = '',
+    String? timeEstimate,
+    int priority = 1,
+  }) async {
+    if (id.isEmpty) return;
+    final index = _service.all.indexWhere((c) => c.id == id);
+    if (index < 0) return;
+    final existing = _service.all[index];
+    final updated = existing.copyWith(
+      title: title,
+      tag: tag,
+      description: description,
+      timeEstimate: timeEstimate,
+      priority: priority,
+    );
+    final result = await _repository.updateCard(updated);
+    switch (result) {
+      case Success():
+        _service.replaceAt(index, updated);
+        notifyListeners();
+      case Failure(:final error):
+        _lastError = error;
+        notifyListeners();
+    }
+  }
+
+  Future<void> markCardAsDone(int index) async {
+    if (index < 0 || index >= _service.count) return;
+    final card = _service.cardAt(index);
+    if (card == null) return;
+    final updated = card.copyWith(isDone: true);
+    final result = await _repository.updateCard(updated);
+    switch (result) {
+      case Success():
+        _service.removeAt(index);
+        notifyListeners();
+        final syncResult = await _repository.syncPositions(_service.all);
+        if (syncResult case Failure(:final error)) {
+          _lastError = error;
+          notifyListeners();
+        }
+      case Failure(:final error):
+        _lastError = error;
+        notifyListeners();
     }
   }
 
   Future<void> cycleFrontToEnd() async {
     _service.cycleFrontToEnd();
-    _peekedIndex = null;
     notifyListeners();
 
     final result = await _repository.syncPositions(_service.all);
@@ -175,21 +218,6 @@ class StackViewModel extends ChangeNotifier {
       _lastError = error;
       notifyListeners();
     }
-  }
-
-  void peek(int index) {
-    if (index < 0 || index >= _service.count) return;
-    if (_peekedIndex == index) {
-      _peekedIndex = null;
-    } else {
-      _peekedIndex = index;
-    }
-    notifyListeners();
-  }
-
-  void clearPeek() {
-    _peekedIndex = null;
-    notifyListeners();
   }
 
   void openModal() {

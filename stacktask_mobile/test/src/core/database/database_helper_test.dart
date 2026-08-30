@@ -21,6 +21,7 @@ void main() {
           tag TEXT NOT NULL,
           time_estimate TEXT,
           priority INTEGER NOT NULL DEFAULT 1,
+        is_done INTEGER NOT NULL DEFAULT 0,
           position INTEGER NOT NULL,
           created_at TEXT NOT NULL
         )
@@ -45,7 +46,7 @@ void main() {
       final columnNames = result.map((row) => row['name'] as String).toList();
       expect(columnNames, containsAll([
         'id', 'title', 'description', 'tag',
-        'time_estimate', 'priority', 'position', 'created_at',
+        'time_estimate', 'priority', 'is_done', 'position', 'created_at',
       ]));
     });
 

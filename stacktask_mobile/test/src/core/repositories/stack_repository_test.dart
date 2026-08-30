@@ -16,6 +16,7 @@ Future<Database> _createTestDatabase() async {
       tag TEXT NOT NULL,
       time_estimate TEXT,
       priority INTEGER NOT NULL DEFAULT 1,
+        is_done INTEGER NOT NULL DEFAULT 0,
       position INTEGER NOT NULL,
       created_at TEXT NOT NULL
     )
@@ -181,6 +182,25 @@ void main() {
         success: (changes) {
           expect(changes.any((c) => c.changeType == ChangeType.update), isTrue);
         },
+        failure: (error) => fail('Should not fail: $error'),
+      );
+    });
+
+    test('updateCard with is_done=true persists the flag', () async {
+      final card = TaskCard(
+        id: 'repo-done',
+        title: 'Finish report',
+        tag: 'dev',
+        createdAt: DateTime(2025, 6, 15),
+      );
+      await repository.saveCard(card, 0);
+      final done = card.copyWith(isDone: true);
+      final result = await repository.updateCard(done);
+      expect(result, isA<Success>());
+
+      final loadResult = await repository.loadCards();
+      loadResult.when(
+        success: (cards) => expect(cards.first.isDone, isTrue),
         failure: (error) => fail('Should not fail: $error'),
       );
     });

@@ -1,16 +1,15 @@
 # stacktask_mobile
 
-A new Flutter project.
+The Flutter app for StackTasks — a stack-based task manager for ADHD brains.
 
-## Getting Started
+See the [root README](../README.md) for the project overview, screenshots, and
+brand assets.
 
-This project is a starting point for a Flutter application.
+## Run
 
-A few resources to get you started if this is your first Flutter project:
+    flutter pub get
+    flutter run
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+## Test
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+    flutter test
