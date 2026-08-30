@@ -31,8 +31,11 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
   static const double _cardSpacing = 40.0;
   static const double _bottomPadding = 80.0;
   static const double _swipeAffordanceReach = 120.0;
+  static const double _defaultFrontCardHeight = 320.0;
 
   final CardStackController _controller = CardStackController();
+  final GlobalKey _frontCardKey = GlobalKey();
+  double _frontCardHeight = _defaultFrontCardHeight;
 
   @override
   void dispose() {
@@ -51,38 +54,51 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
       builder: (context, constraints) {
         final cardWidth = constraints.maxWidth * 0.88;
         final cardLeft = (constraints.maxWidth - cardWidth) / 2;
-        final stackHeight = _bottomPadding + (totalCards * _cardSpacing) + 320;
+        final frontCardTop =
+            constraints.maxHeight - _bottomPadding - _frontCardHeight;
 
-        return SizedBox(
-          height: stackHeight,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              for (int i = totalCards - 1; i >= 0; i--)
-                Positioned(
-                  bottom: _bottomPadding + i * _cardSpacing,
-                  left: cardLeft,
-                  child: SizedBox(
-                    width: cardWidth,
-                    child: i == 0
-                        ? _buildFrontCard(
-                            widget.cards[0],
-                            constraints.maxWidth,
-                            controller,
-                          )
-                        : _buildBackgroundCard(
-                            widget.cards[i],
-                            i,
-                            constraints.maxWidth,
-                            controller,
-                          ),
-                  ),
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => _measureFrontCard());
+
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            for (int i = totalCards - 1; i >= 0; i--)
+              Positioned(
+                bottom: i == 0 ? _bottomPadding : null,
+                top: i == 0 ? null : frontCardTop - i * _cardSpacing,
+                left: cardLeft,
+                child: SizedBox(
+                  width: cardWidth,
+                  key: i == 0 ? _frontCardKey : null,
+                  child: i == 0
+                      ? _buildFrontCard(
+                          widget.cards[0],
+                          constraints.maxWidth,
+                          controller,
+                        )
+                      : _buildBackgroundCard(
+                          widget.cards[i],
+                          i,
+                          constraints.maxWidth,
+                          controller,
+                        ),
                 ),
-            ],
-          ),
+              ),
+          ],
         );
       },
     );
+  }
+
+  void _measureFrontCard() {
+    final renderObject = _frontCardKey.currentContext?.findRenderObject();
+    if (renderObject is RenderBox && renderObject.hasSize) {
+      final height = renderObject.size.height;
+      if (height > 0 && (height - _frontCardHeight).abs() > 0.5) {
+        setState(() => _frontCardHeight = height);
+      }
+    }
   }
 
   Widget _buildFrontCard(

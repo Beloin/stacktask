@@ -5,7 +5,7 @@ import 'package:stacktask_mobile/src/core/models/task_card.dart';
 import 'package:stacktask_mobile/src/core/repositories/stack_repository.dart';
 import 'package:stacktask_mobile/src/core/theme/app_theme.dart';
 import 'package:stacktask_mobile/src/ui/view_models/stack_view_model.dart';
-import 'package:stacktask_mobile/src/ui/widgets/add_task_modal.dart';
+import 'package:stacktask_mobile/src/ui/screens/add_task_screen.dart';
 import 'package:stacktask_mobile/src/ui/widgets/card_stack_widget2.dart';
 import 'package:stacktask_mobile/src/ui/widgets/empty_state_widget.dart';
 import 'package:stacktask_mobile/src/ui/widgets/fab_widget.dart';
@@ -209,47 +209,15 @@ class _TaskDetailSheet extends StatelessWidget {
     final vm = context.read<StackViewModel>();
     final currentCard = vm.cards[index];
     vm.openModal();
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (modalContext) => GestureDetector(
-        onTap: () => Navigator.of(modalContext).pop(),
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          color: Colors.black54,
-          child: DraggableScrollableSheet(
-            initialChildSize: 0.7,
-            minChildSize: 0.5,
-            maxChildSize: 0.9,
-            builder: (context, scrollController) {
-              return AddTaskModal(
-                editing: currentCard,
-                onSubmit:
-                    ({
-                      required title,
-                      required tag,
-                      description = '',
-                      timeEstimate,
-                      priority = 1,
-                    }) {
-                      vm.updateCard(
-                        id: currentCard.id,
-                        title: title,
-                        tag: tag,
-                        description: description,
-                        timeEstimate: timeEstimate,
-                        priority: priority,
-                      );
-                    },
-              );
-            },
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => AddTaskScreen(vm: vm, editing: currentCard),
           ),
-        ),
-      ),
-    ).whenComplete(() {
-      vm.closeModal();
-    });
+        )
+        .whenComplete(() {
+          vm.closeModal();
+        });
   }
 }
 
@@ -270,44 +238,14 @@ class _FabArea extends StatelessWidget {
 
   void _openAddTaskModal(BuildContext context, StackViewModel vm) {
     vm.openModal();
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (modalContext) => GestureDetector(
-        onTap: () => Navigator.of(modalContext).pop(),
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          color: Colors.black54,
-          child: DraggableScrollableSheet(
-            initialChildSize: 0.7,
-            minChildSize: 0.5,
-            maxChildSize: 0.9,
-            builder: (context, scrollController) {
-              return AddTaskModal(
-                onSubmit:
-                    ({
-                      required title,
-                      required tag,
-                      description = '',
-                      timeEstimate,
-                      priority = 1,
-                    }) {
-                      vm.addCard(
-                        title: title,
-                        tag: tag,
-                        description: description,
-                        timeEstimate: timeEstimate,
-                        priority: priority,
-                      );
-                    },
-              );
-            },
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => AddTaskScreen(vm: vm),
           ),
-        ),
-      ),
-    ).whenComplete(() {
-      vm.closeModal();
-    });
+        )
+        .whenComplete(() {
+          vm.closeModal();
+        });
   }
 }
