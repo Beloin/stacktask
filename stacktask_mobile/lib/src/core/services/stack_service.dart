@@ -36,6 +36,12 @@ class StackService {
     }
   }
 
+  void replaceAt(int index, TaskCard card) {
+    if (index >= 0 && index < _cards.length) {
+      _cards[index] = card;
+    }
+  }
+
   void promoteToFront(int index) {
     if (index <= 0 || index >= _cards.length) return;
     final card = _cards.removeAt(index);

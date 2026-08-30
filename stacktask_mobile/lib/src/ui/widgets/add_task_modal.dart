@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stacktask_mobile/src/core/models/task_card.dart';
 import 'package:stacktask_mobile/src/core/models/task_tag.dart';
 import 'package:stacktask_mobile/src/core/theme/app_theme.dart';
 
@@ -12,18 +13,34 @@ class AddTaskModal extends StatefulWidget {
   })
       onSubmit;
 
-  const AddTaskModal({super.key, required this.onSubmit});
+  final TaskCard? editing;
+
+  const AddTaskModal({super.key, required this.onSubmit, this.editing});
 
   @override
   State<AddTaskModal> createState() => _AddTaskModalState();
 }
 
 class _AddTaskModalState extends State<AddTaskModal> {
-  final _titleController = TextEditingController();
-  final _descriptionController = TextEditingController();
-  final _timeController = TextEditingController();
-  TaskTag _selectedTag = TaskTag.dev;
-  int _priority = 1;
+  late final TextEditingController _titleController;
+  late final TextEditingController _descriptionController;
+  late final TextEditingController _timeController;
+  late TaskTag _selectedTag;
+  late int _priority;
+
+  bool get _isEditing => widget.editing != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.editing;
+    _titleController = TextEditingController(text: e?.title ?? '');
+    _descriptionController =
+        TextEditingController(text: e?.description ?? '');
+    _timeController = TextEditingController(text: e?.timeEstimate ?? '');
+    _selectedTag = e != null ? TaskTag.fromName(e.tag) : TaskTag.dev;
+    _priority = e?.priority ?? 1;
+  }
 
   @override
   void dispose() {
@@ -74,7 +91,7 @@ class _AddTaskModalState extends State<AddTaskModal> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'New Task',
+                    _isEditing ? 'Edit Task' : 'New Task',
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                   const SizedBox(height: 20),
@@ -212,9 +229,9 @@ class _AddTaskModalState extends State<AddTaskModal> {
                 ),
                 backgroundColor: AppColors.accent,
               ),
-              child: const Text(
-                'Add to Stack',
-                style: TextStyle(
+              child: Text(
+                _isEditing ? 'Save Changes' : 'Add to Stack',
+                style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
                   color: Colors.white,

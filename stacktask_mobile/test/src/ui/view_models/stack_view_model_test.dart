@@ -15,6 +15,7 @@ Future<Database> _createTestDatabase() async {
       tag TEXT NOT NULL,
       time_estimate TEXT,
       priority INTEGER NOT NULL DEFAULT 1,
+        is_done INTEGER NOT NULL DEFAULT 0,
       position INTEGER NOT NULL,
       created_at TEXT NOT NULL
     )
@@ -138,6 +139,57 @@ void main() {
       await viewModel.addCard(title: 'C', tag: 'dev');
       await viewModel.moveCardTo(2, 0);
       expect(viewModel.cards[0].title, 'A');
+    });
+
+    test('markCardAsDone removes card from active stack and marks it done',
+        () async {
+      await viewModel.addCard(title: 'To complete', tag: 'dev');
+      expect(viewModel.count, 1);
+      expect(viewModel.cards[0].isDone, isFalse);
+      await viewModel.markCardAsDone(0);
+      expect(viewModel.count, 0);
+    });
+
+    test('markCardAsDone on invalid index is a no-op', () async {
+      await viewModel.addCard(title: 'X', tag: 'dev');
+      await viewModel.markCardAsDone(99);
+      expect(viewModel.count, 1);
+      await viewModel.markCardAsDone(-1);
+      expect(viewModel.count, 1);
+    });
+
+    test('updateCard changes fields in place and keeps id', () async {
+      await viewModel.addCard(
+        title: 'Original',
+        tag: 'dev',
+        description: 'old',
+        priority: 1,
+      );
+      final originalId = viewModel.cards[0].id;
+      final originalCreatedAt = viewModel.cards[0].createdAt;
+      await viewModel.updateCard(
+        id: originalId,
+        title: 'Edited',
+        tag: 'review',
+        description: 'new',
+        priority: 4,
+      );
+      expect(viewModel.cards[0].title, 'Edited');
+      expect(viewModel.cards[0].tag, 'review');
+      expect(viewModel.cards[0].description, 'new');
+      expect(viewModel.cards[0].priority, 4);
+      expect(viewModel.cards[0].id, originalId);
+      expect(viewModel.cards[0].createdAt, originalCreatedAt);
+    });
+
+    test('updateCard with unknown id is a no-op', () async {
+      await viewModel.addCard(title: 'X', tag: 'dev');
+      await viewModel.updateCard(
+        id: 'does-not-exist',
+        title: 'whatever',
+        tag: 'dev',
+      );
+      expect(viewModel.cards[0].title, 'X');
     });
   });
 }

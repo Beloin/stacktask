@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:stacktask_mobile/src/core/database/database_helper.dart';
+import 'package:stacktask_mobile/src/core/models/task_card.dart';
 import 'package:stacktask_mobile/src/core/repositories/stack_repository.dart';
 import 'package:stacktask_mobile/src/core/theme/app_theme.dart';
 import 'package:stacktask_mobile/src/ui/view_models/stack_view_model.dart';
@@ -9,6 +10,7 @@ import 'package:stacktask_mobile/src/ui/widgets/card_stack_widget2.dart';
 import 'package:stacktask_mobile/src/ui/widgets/empty_state_widget.dart';
 import 'package:stacktask_mobile/src/ui/widgets/fab_widget.dart';
 import 'package:stacktask_mobile/src/ui/widgets/header_widget.dart';
+import 'package:stacktask_mobile/src/ui/widgets/task_detail_modal.dart';
 
 class StackScreen extends StatelessWidget {
   const StackScreen({super.key});
@@ -133,8 +135,9 @@ class _CardArea extends StatelessWidget {
                   ? const EmptyStateWidget()
                   : CardStackWidget2(
                       cards: vm.cards,
-                      onSwipeLeft: () => vm.dismissCard(SwipeDirection.left),
-                      onSwipeRight: () => vm.dismissCard(SwipeDirection.right),
+                      onCardTap: (i) => _openTaskDetailModal(context, vm, i),
+                      onSwipeLeft: () => vm.removeCardAt(0),
+                      onSwipeRight: () => vm.markCardAsDone(0),
                       onFrontSwipeDown: () => vm.cycleFrontToEnd(),
                       onMoveCard: (from, to) => vm.moveCardTo(from, to),
                     ),
@@ -143,6 +146,110 @@ class _CardArea extends StatelessWidget {
         );
       },
     );
+  }
+
+  void _openTaskDetailModal(
+    BuildContext context,
+    StackViewModel vm,
+    int index,
+  ) {
+    final card = vm.cards[index];
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (modalContext) => ChangeNotifierProvider.value(
+        value: vm,
+        child: _TaskDetailSheet(
+          card: card,
+          cardIndex: index,
+        ),
+      ),
+    );
+  }
+}
+
+class _TaskDetailSheet extends StatelessWidget {
+  final TaskCard card;
+  final int cardIndex;
+
+  const _TaskDetailSheet({required this.card, required this.cardIndex});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Navigator.of(context).pop(),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        color: Colors.black54,
+        child: DraggableScrollableSheet(
+          initialChildSize: 0.7,
+          minChildSize: 0.5,
+          maxChildSize: 0.9,
+          builder: (context, scrollController) {
+            return TaskDetailModal(
+              card: card,
+              onDismiss: () => Navigator.of(context).pop(),
+              onDelete: () {
+                Navigator.of(context).pop();
+                context.read<StackViewModel>().removeCardAt(cardIndex);
+              },
+              onEdit: () {
+                Navigator.of(context).pop();
+                _openEditTaskModal(context, cardIndex);
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  void _openEditTaskModal(BuildContext context, int index) {
+    final vm = context.read<StackViewModel>();
+    final currentCard = vm.cards[index];
+    vm.openModal();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (modalContext) => GestureDetector(
+        onTap: () => Navigator.of(modalContext).pop(),
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          color: Colors.black54,
+          child: DraggableScrollableSheet(
+            initialChildSize: 0.7,
+            minChildSize: 0.5,
+            maxChildSize: 0.9,
+            builder: (context, scrollController) {
+              return AddTaskModal(
+                editing: currentCard,
+                onSubmit:
+                    ({
+                      required title,
+                      required tag,
+                      description = '',
+                      timeEstimate,
+                      priority = 1,
+                    }) {
+                      vm.updateCard(
+                        id: currentCard.id,
+                        title: title,
+                        tag: tag,
+                        description: description,
+                        timeEstimate: timeEstimate,
+                        priority: priority,
+                      );
+                    },
+              );
+            },
+          ),
+        ),
+      ),
+    ).whenComplete(() {
+      vm.closeModal();
+    });
   }
 }
 

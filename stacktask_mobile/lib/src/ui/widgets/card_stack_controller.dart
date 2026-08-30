@@ -113,8 +113,12 @@ class CardStackController extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool _isFrontDragging = false;
+  bool get isFrontDragging => _isFrontDragging;
+
   void onFrontDragStart() {
     if (_isSwipingOut) return;
+    _isFrontDragging = true;
     _frontDragX = 0;
     _frontDragY = 0;
     notifyListeners();
@@ -128,7 +132,10 @@ class CardStackController extends ChangeNotifier {
   }
 
   FrontDragResult onFrontDragEnd(Offset velocity) {
-    if (_isSwipingOut) return FrontDragResult.none;
+    if (_isSwipingOut) {
+      _isFrontDragging = false;
+      return FrontDragResult.none;
+    }
 
     final fastHorizontalSwipe = velocity.dx.abs() > swipeVelocityThreshold;
     final fastVerticalSwipe = velocity.dy > swipeVelocityThreshold;
@@ -145,6 +152,7 @@ class CardStackController extends ChangeNotifier {
       result = FrontDragResult.swipeDown;
     }
 
+    _isFrontDragging = false;
     _frontDragX = 0;
     _frontDragY = 0;
     notifyListeners();
@@ -168,6 +176,7 @@ class CardStackController extends ChangeNotifier {
   void reset() {
     _frontDragX = 0;
     _frontDragY = 0;
+    _isFrontDragging = false;
     _isSwipingOut = false;
     _swipeOutDirection = SwipeOutDirection.none;
     _selectedIndex = null;

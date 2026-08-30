@@ -158,6 +158,57 @@ class StackViewModel extends ChangeNotifier {
     }
   }
 
+  Future<void> updateCard({
+    required String id,
+    required String title,
+    required String tag,
+    String description = '',
+    String? timeEstimate,
+    int priority = 1,
+  }) async {
+    if (id.isEmpty) return;
+    final index = _service.all.indexWhere((c) => c.id == id);
+    if (index < 0) return;
+    final existing = _service.all[index];
+    final updated = existing.copyWith(
+      title: title,
+      tag: tag,
+      description: description,
+      timeEstimate: timeEstimate,
+      priority: priority,
+    );
+    final result = await _repository.updateCard(updated);
+    switch (result) {
+      case Success():
+        _service.replaceAt(index, updated);
+        notifyListeners();
+      case Failure(:final error):
+        _lastError = error;
+        notifyListeners();
+    }
+  }
+
+  Future<void> markCardAsDone(int index) async {
+    if (index < 0 || index >= _service.count) return;
+    final card = _service.cardAt(index);
+    if (card == null) return;
+    final updated = card.copyWith(isDone: true);
+    final result = await _repository.updateCard(updated);
+    switch (result) {
+      case Success():
+        _service.removeAt(index);
+        notifyListeners();
+        final syncResult = await _repository.syncPositions(_service.all);
+        if (syncResult case Failure(:final error)) {
+          _lastError = error;
+          notifyListeners();
+        }
+      case Failure(:final error):
+        _lastError = error;
+        notifyListeners();
+    }
+  }
+
   Future<void> cycleFrontToEnd() async {
     _service.cycleFrontToEnd();
     notifyListeners();

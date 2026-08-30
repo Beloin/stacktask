@@ -6,6 +6,7 @@ class TaskCard {
     this.description = '',
     this.timeEstimate,
     this.priority = 1,
+    this.isDone = false,
     required this.createdAt,
   });
 
@@ -15,6 +16,7 @@ class TaskCard {
   final String description;
   final String? timeEstimate;
   final int priority;
+  final bool isDone;
   final DateTime createdAt;
 
   TaskCard copyWith({
@@ -24,6 +26,7 @@ class TaskCard {
     String? description,
     String? timeEstimate,
     int? priority,
+    bool? isDone,
     DateTime? createdAt,
   }) {
     return TaskCard(
@@ -33,6 +36,7 @@ class TaskCard {
       description: description ?? this.description,
       timeEstimate: timeEstimate ?? this.timeEstimate,
       priority: priority ?? this.priority,
+      isDone: isDone ?? this.isDone,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -45,6 +49,7 @@ class TaskCard {
       'tag': tag,
       'time_estimate': timeEstimate,
       'priority': priority,
+      'is_done': isDone ? 1 : 0,
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -57,6 +62,7 @@ class TaskCard {
       description: (map['description'] as String?) ?? '',
       timeEstimate: map['time_estimate'] as String?,
       priority: (map['priority'] as int?) ?? 1,
+      isDone: ((map['is_done'] as int?) ?? 0) == 1,
       createdAt: DateTime.parse(map['created_at'] as String),
     );
   }
@@ -64,11 +70,27 @@ class TaskCard {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is TaskCard && id == other.id && title == other.title && tag == other.tag;
+      other is TaskCard &&
+          id == other.id &&
+          title == other.title &&
+          tag == other.tag &&
+          description == other.description &&
+          timeEstimate == other.timeEstimate &&
+          priority == other.priority &&
+          isDone == other.isDone;
 
   @override
-  int get hashCode => Object.hash(id, title, tag);
+  int get hashCode => Object.hash(
+        id,
+        title,
+        tag,
+        description,
+        timeEstimate,
+        priority,
+        isDone,
+      );
 
   @override
-  String toString() => 'TaskCard(id: $id, title: $title, tag: $tag)';
+  String toString() =>
+      'TaskCard(id: $id, title: $title, tag: $tag, isDone: $isDone)';
 }
