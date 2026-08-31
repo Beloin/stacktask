@@ -9,6 +9,7 @@ class TaskDetailModal extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onDismiss;
+  final VoidCallback onMove;
 
   const TaskDetailModal({
     super.key,
@@ -16,6 +17,7 @@ class TaskDetailModal extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onDismiss,
+    required this.onMove,
   });
 
   @override
@@ -126,6 +128,29 @@ class TaskDetailModal extends StatelessWidget {
                       'Delete',
                       style: TextStyle(
                         color: AppColors.danger,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: onMove,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      side: BorderSide(
+                        color: AppColors.accentLight.withValues(alpha: 0.7),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text(
+                      'Move',
+                      style: TextStyle(
+                        color: AppColors.accentLight,
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                       ),

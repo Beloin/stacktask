@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stacktask_mobile/src/core/models/task_card.dart';
+import 'package:stacktask_mobile/src/core/models/task_group.dart';
 
 void main() {
   group('TaskCard', () {
@@ -146,6 +147,42 @@ void main() {
       final str = card.toString();
       expect(str, contains('test-id-1'));
       expect(str, contains('Fix login bug'));
+    });
+
+    test('defaults groupId to TaskGroup.defaultId', () {
+      final minimal = TaskCard(
+        id: 'id-4',
+        title: 'No group',
+        tag: 'dev',
+        createdAt: now,
+      );
+      expect(minimal.groupId, TaskGroup.defaultId);
+    });
+
+    test('copyWith updates groupId', () {
+      final updated = card.copyWith(groupId: 'group-xyz');
+      expect(updated.groupId, 'group-xyz');
+      expect(card.groupId, TaskGroup.defaultId);
+    });
+
+    test('toMap serializes group_id', () {
+      expect(card.toMap()['group_id'], TaskGroup.defaultId);
+      expect(
+        card.copyWith(groupId: 'g-2').toMap()['group_id'],
+        'g-2',
+      );
+    });
+
+    test('fromMap reads group_id and falls back to defaultId', () {
+      final fromMap = TaskCard.fromMap({...card.toMap(), 'group_id': 'g-2'});
+      expect(fromMap.groupId, 'g-2');
+      final withoutGroup = TaskCard.fromMap({...card.toMap()}..remove('group_id'));
+      expect(withoutGroup.groupId, TaskGroup.defaultId);
+    });
+
+    test('equality includes groupId', () {
+      final other = card.copyWith(groupId: 'different');
+      expect(card, isNot(equals(other)));
     });
   });
 }

@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:stacktask_mobile/src/core/theme/app_theme.dart';
 
 class HeaderWidget extends StatelessWidget {
+  final String groupName;
   final int taskCount;
 
-  const HeaderWidget({super.key, required this.taskCount});
+  const HeaderWidget({
+    super.key,
+    required this.groupName,
+    required this.taskCount,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -24,9 +29,12 @@ class HeaderWidget extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
-              Text(
-                'Tasks',
-                style: Theme.of(context).textTheme.headlineLarge,
+              Flexible(
+                child: Text(
+                  groupName,
+                  style: Theme.of(context).textTheme.headlineLarge,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               const Spacer(),
               TweenAnimationBuilder<double>(

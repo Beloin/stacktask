@@ -1,3 +1,5 @@
+import 'package:stacktask_mobile/src/core/models/task_group.dart';
+
 class TaskCard {
   const TaskCard({
     required this.id,
@@ -8,6 +10,7 @@ class TaskCard {
     this.priority = 1,
     this.isDone = false,
     required this.createdAt,
+    this.groupId = TaskGroup.defaultId,
   });
 
   final String id;
@@ -18,6 +21,7 @@ class TaskCard {
   final int priority;
   final bool isDone;
   final DateTime createdAt;
+  final String groupId;
 
   TaskCard copyWith({
     String? id,
@@ -28,6 +32,7 @@ class TaskCard {
     int? priority,
     bool? isDone,
     DateTime? createdAt,
+    String? groupId,
   }) {
     return TaskCard(
       id: id ?? this.id,
@@ -38,6 +43,7 @@ class TaskCard {
       priority: priority ?? this.priority,
       isDone: isDone ?? this.isDone,
       createdAt: createdAt ?? this.createdAt,
+      groupId: groupId ?? this.groupId,
     );
   }
 
@@ -50,6 +56,7 @@ class TaskCard {
       'time_estimate': timeEstimate,
       'priority': priority,
       'is_done': isDone ? 1 : 0,
+      'group_id': groupId,
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -64,6 +71,7 @@ class TaskCard {
       priority: (map['priority'] as int?) ?? 1,
       isDone: ((map['is_done'] as int?) ?? 0) == 1,
       createdAt: DateTime.parse(map['created_at'] as String),
+      groupId: (map['group_id'] as String?) ?? TaskGroup.defaultId,
     );
   }
 
@@ -77,7 +85,8 @@ class TaskCard {
           description == other.description &&
           timeEstimate == other.timeEstimate &&
           priority == other.priority &&
-          isDone == other.isDone;
+          isDone == other.isDone &&
+          groupId == other.groupId;
 
   @override
   int get hashCode => Object.hash(
@@ -88,9 +97,10 @@ class TaskCard {
         timeEstimate,
         priority,
         isDone,
+        groupId,
       );
 
   @override
   String toString() =>
-      'TaskCard(id: $id, title: $title, tag: $tag, isDone: $isDone)';
+      'TaskCard(id: $id, title: $title, tag: $tag, isDone: $isDone, groupId: $groupId)';
 }

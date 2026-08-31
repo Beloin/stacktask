@@ -1,0 +1,150 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:stacktask_mobile/src/core/database/database_helper.dart';
+import 'package:stacktask_mobile/src/core/models/task_group.dart';
+
+void main() {
+  setUpAll(() {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  });
+
+  group('DatabaseHelper migration v2 -> v3', () {
+    test('adds task_groups, inserts Default, backfills group_id', () async {
+      final path = '${inMemoryDatabasePath}_v2';
+      final v2 = await databaseFactoryFfi.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 2,
+          onCreate: (db, _) async {
+            await db.execute('''
+              CREATE TABLE ${DatabaseHelper.tasksTable} (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                tag TEXT NOT NULL,
+                time_estimate TEXT,
+                priority INTEGER NOT NULL DEFAULT 1,
+                is_done INTEGER NOT NULL DEFAULT 0,
+                position INTEGER NOT NULL,
+                created_at TEXT NOT NULL
+              )
+            ''');
+            await db.execute('''
+              CREATE TABLE ${DatabaseHelper.changesTable} (
+                id TEXT PRIMARY KEY,
+                task_id TEXT,
+                change_type TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                timestamp TEXT NOT NULL
+              )
+            ''');
+          },
+        ),
+      );
+
+      await v2.insert(DatabaseHelper.tasksTable, {
+        'id': 'm-1',
+        'title': 'Legacy task A',
+        'description': '',
+        'tag': 'dev',
+        'time_estimate': null,
+        'priority': 1,
+        'is_done': 0,
+        'position': 0,
+        'created_at': DateTime(2025, 1, 1).toIso8601String(),
+      });
+      await v2.insert(DatabaseHelper.tasksTable, {
+        'id': 'm-2',
+        'title': 'Legacy task B',
+        'description': '',
+        'tag': 'bug',
+        'time_estimate': null,
+        'priority': 2,
+        'is_done': 0,
+        'position': 1,
+        'created_at': DateTime(2025, 1, 2).toIso8601String(),
+      });
+      await v2.close();
+
+      final helper = DatabaseHelper.instance;
+      final upgraded = await helper.openForTesting(
+        path: path,
+        factory: databaseFactoryFfi,
+      );
+
+      final groups = await upgraded.query(DatabaseHelper.groupsTable);
+      expect(groups.length, 1);
+      expect(groups.first['id'], TaskGroup.defaultId);
+      expect(groups.first['name'], TaskGroup.defaultName);
+
+      final tasks = await upgraded.query(DatabaseHelper.tasksTable);
+      expect(tasks.length, 2);
+      for (final row in tasks) {
+        expect(row['group_id'], TaskGroup.defaultId);
+      }
+
+      final columns = await upgraded.rawQuery('PRAGMA table_info(tasks)');
+      final colNames = columns.map((c) => c['name'] as String).toList();
+      expect(colNames, contains('group_id'));
+
+      final notNull = columns.firstWhere((c) => c['name'] == 'group_id');
+      expect(notNull['notnull'], 1);
+
+      await upgraded.close();
+      await databaseFactoryFfi.deleteDatabase(path);
+    });
+
+    test('migration is idempotent when re-run on a v3 DB', () async {
+      final path = '${inMemoryDatabasePath}_v3';
+      final v3 = await databaseFactoryFfi.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 3,
+          onCreate: (db, _) async {
+            await db.execute('''
+              CREATE TABLE ${DatabaseHelper.groupsTable} (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL
+              )
+            ''');
+            await db.insert(DatabaseHelper.groupsTable, {
+              'id': TaskGroup.defaultId,
+              'name': TaskGroup.defaultName,
+              'created_at': DateTime.now().toIso8601String(),
+            });
+            await db.execute('''
+              CREATE TABLE ${DatabaseHelper.tasksTable} (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                tag TEXT NOT NULL,
+                time_estimate TEXT,
+                priority INTEGER NOT NULL DEFAULT 1,
+                is_done INTEGER NOT NULL DEFAULT 0,
+                position INTEGER NOT NULL,
+                group_id TEXT NOT NULL,
+                created_at TEXT NOT NULL
+              )
+            ''');
+          },
+        ),
+      );
+      await v3.close();
+
+      final helper = DatabaseHelper.instance;
+      final reopened = await helper.openForTesting(
+        path: path,
+        factory: databaseFactoryFfi,
+      );
+
+      final groups = await reopened.query(DatabaseHelper.groupsTable);
+      expect(groups.length, 1);
+      expect(groups.first['id'], TaskGroup.defaultId);
+
+      await reopened.close();
+      await databaseFactoryFfi.deleteDatabase(path);
+    });
+  });
+}

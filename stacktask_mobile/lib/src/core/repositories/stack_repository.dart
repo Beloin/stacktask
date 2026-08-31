@@ -22,10 +22,12 @@ class StackRepository {
     return StackRepository(database: db);
   }
 
-  AsyncResult<List<TaskCard>, ErrorCode> loadCards() async {
+  AsyncResult<List<TaskCard>, ErrorCode> loadCards(String groupId) async {
     try {
       final maps = await _db.query(
         DatabaseHelper.tasksTable,
+        where: 'group_id = ?',
+        whereArgs: [groupId],
         orderBy: 'position ASC',
       );
       return Success(maps.map((m) => TaskCard.fromMap(m)).toList());
@@ -72,6 +74,37 @@ class StackRepository {
     }
   }
 
+  AsyncResult<List<String>, ErrorCode> deleteCardsByGroup(String groupId) async {
+    try {
+      final cards = await _db.query(
+        DatabaseHelper.tasksTable,
+        columns: ['id'],
+        where: 'group_id = ?',
+        whereArgs: [groupId],
+      );
+      final ids = cards.map((c) => c['id'] as String).toList();
+      if (ids.isEmpty) return const Success(<String>[]);
+
+      await _db.delete(
+        DatabaseHelper.tasksTable,
+        where: 'group_id = ?',
+        whereArgs: [groupId],
+      );
+
+      final placeholders = List.filled(ids.length, '?').join(',');
+      await _db.delete(
+        DatabaseHelper.changesTable,
+        where: 'task_id IN ($placeholders)',
+        whereArgs: ids,
+      );
+      return Success(ids);
+    } catch (e) {
+      return Failure(
+        ErrorCode.fromString(message: 'Failed to delete group cards: $e'),
+      );
+    }
+  }
+
   AsyncResult<void, ErrorCode> syncPositions(List<TaskCard> cards) async {
     try {
       final batch = _db.batch();
@@ -113,6 +146,30 @@ class StackRepository {
       return const Success(null);
     } catch (e) {
       return Failure(ErrorCode.fromString(message: 'Failed to update card: $e'));
+    }
+  }
+
+  AsyncResult<void, ErrorCode> moveCardToGroup(
+    String cardId,
+    String newGroupId,
+  ) async {
+    try {
+      await _db.update(
+        DatabaseHelper.tasksTable,
+        {'group_id': newGroupId},
+        where: 'id = ?',
+        whereArgs: [cardId],
+      );
+      await _logChange(
+        changeType: ChangeType.update,
+        taskId: cardId,
+        payload: {'group_id': newGroupId},
+      );
+      return const Success(null);
+    } catch (e) {
+      return Failure(
+        ErrorCode.fromString(message: 'Failed to move card to group: $e'),
+      );
     }
   }
 

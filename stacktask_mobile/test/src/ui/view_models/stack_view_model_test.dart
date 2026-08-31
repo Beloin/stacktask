@@ -1,12 +1,27 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:stacktask_mobile/src/core/database/database_helper.dart';
+import 'package:stacktask_mobile/src/core/models/task_group.dart';
+import 'package:stacktask_mobile/src/core/repositories/group_repository.dart';
 import 'package:stacktask_mobile/src/core/repositories/stack_repository.dart';
 import 'package:stacktask_mobile/src/core/services/stack_service.dart';
+import 'package:stacktask_mobile/src/core/services/task_group_service.dart';
 import 'package:stacktask_mobile/src/ui/view_models/stack_view_model.dart';
 
 Future<Database> _createTestDatabase() async {
   final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS ${DatabaseHelper.groupsTable} (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL
+    )
+  ''');
+  await db.insert(DatabaseHelper.groupsTable, {
+    'id': TaskGroup.defaultId,
+    'name': TaskGroup.defaultName,
+    'created_at': DateTime.now().toIso8601String(),
+  }, conflictAlgorithm: ConflictAlgorithm.ignore);
   await db.execute('''
     CREATE TABLE IF NOT EXISTS ${DatabaseHelper.tasksTable} (
       id TEXT PRIMARY KEY,
@@ -15,8 +30,9 @@ Future<Database> _createTestDatabase() async {
       tag TEXT NOT NULL,
       time_estimate TEXT,
       priority INTEGER NOT NULL DEFAULT 1,
-        is_done INTEGER NOT NULL DEFAULT 0,
+      is_done INTEGER NOT NULL DEFAULT 0,
       position INTEGER NOT NULL,
+      group_id TEXT NOT NULL,
       created_at TEXT NOT NULL
     )
   ''');
@@ -40,22 +56,38 @@ void main() {
 
   group('StackViewModel', () {
     late StackViewModel viewModel;
+    late Database db;
 
     setUp(() async {
-      final db = await _createTestDatabase();
+      db = await _createTestDatabase();
       final repository = StackRepository(database: db);
+      final groupRepository = GroupRepository(
+        database: db,
+        stackRepository: repository,
+      );
       viewModel = StackViewModel(
         repository: repository,
+        groupRepository: groupRepository,
         service: StackService(),
+        groupService: TaskGroupService(),
       );
+      await viewModel.bootstrap();
     });
 
-    test('starts empty', () {
+    tearDown(() async {
+      await db.close();
+    });
+
+    test('starts empty after bootstrap (no tasks, one default group)', () {
       expect(viewModel.isEmpty, isTrue);
       expect(viewModel.count, 0);
       expect(viewModel.frontCard, isNull);
       expect(viewModel.isModalOpen, isFalse);
       expect(viewModel.hasError, isFalse);
+      expect(viewModel.groups.length, 1);
+      expect(viewModel.groups.first.id, TaskGroup.defaultId);
+      expect(viewModel.selectedGroupId, TaskGroup.defaultId);
+      expect(viewModel.selectedGroupName, TaskGroup.defaultName);
     });
 
     test('addCard adds card to front and notifies listeners', () async {
@@ -64,6 +96,7 @@ void main() {
       await viewModel.addCard(title: 'Test task', tag: 'dev');
       expect(viewModel.count, 1);
       expect(viewModel.frontCard?.title, 'Test task');
+      expect(viewModel.frontCard?.groupId, TaskGroup.defaultId);
       expect(notified, isTrue);
     });
 
@@ -190,6 +223,131 @@ void main() {
         tag: 'dev',
       );
       expect(viewModel.cards[0].title, 'X');
+    });
+
+    group('moveCardToGroup', () {
+      test('moves a card to another group and removes it from active stack',
+          () async {
+        await viewModel.addCard(title: 'Movable', tag: 'dev');
+        await viewModel.addGroup('Work');
+        final targetId = viewModel.selectedGroupId!;
+        expect(viewModel.selectedGroupName, 'Work');
+        expect(viewModel.count, 0);
+
+        await viewModel.selectGroup(TaskGroup.defaultId);
+        expect(viewModel.count, 1);
+        final cardId = viewModel.cards.first.id;
+        final defaultCountBefore =
+            viewModel.groupTaskCounts[TaskGroup.defaultId];
+
+        final moved = await viewModel.moveCardToGroup(cardId, targetId);
+        expect(moved, isTrue);
+        expect(viewModel.cards.any((c) => c.id == cardId), isFalse);
+        expect(viewModel.groupTaskCounts[TaskGroup.defaultId],
+            defaultCountBefore! - 1);
+        expect(viewModel.groupTaskCounts[targetId], 1);
+      });
+
+      test('keeps card visible when moving out of inactive group', () async {
+        await viewModel.addCard(title: 'Stay', tag: 'dev');
+        await viewModel.addGroup('Work');
+        final targetId = viewModel.selectedGroupId!;
+        await viewModel.selectGroup(TaskGroup.defaultId);
+        final cardId = viewModel.cards.first.id;
+
+        final moved = await viewModel.moveCardToGroup(cardId, targetId);
+        expect(moved, isTrue);
+        expect(viewModel.cards.any((c) => c.id == cardId), isFalse);
+      });
+
+      test('returns false when card is not in the active stack', () async {
+        await viewModel.addGroup('Work');
+        await viewModel.selectGroup(TaskGroup.defaultId);
+        final moved = await viewModel.moveCardToGroup('missing-id', 'any');
+        expect(moved, isFalse);
+      });
+
+      test('returns false when target is the current group', () async {
+        await viewModel.addCard(title: 'X', tag: 'dev');
+        final cardId = viewModel.cards.first.id;
+        final moved =
+            await viewModel.moveCardToGroup(cardId, TaskGroup.defaultId);
+        expect(moved, isFalse);
+        expect(viewModel.count, 1);
+      });
+    });
+
+    group('groups', () {
+      test('addGroup creates a new group and selects it', () async {
+        await viewModel.addGroup('Work');
+        expect(viewModel.groups.length, 2);
+        expect(viewModel.selectedGroupId, isNot(TaskGroup.defaultId));
+        expect(viewModel.selectedGroupName, 'Work');
+      });
+
+      test('addGroup surfaces unique-name failures', () async {
+        await viewModel.addGroup('Work');
+        viewModel.clearError();
+        await viewModel.addGroup('Work');
+        expect(viewModel.hasError, isTrue);
+        expect(viewModel.lastError?.message, contains('Work'));
+      });
+
+      test('selectGroup switches the visible stack', () async {
+        await viewModel.addCard(title: 'Default task', tag: 'dev');
+        await viewModel.addGroup('Work');
+        await viewModel.addCard(title: 'Work task', tag: 'dev');
+        expect(viewModel.count, 1);
+        expect(viewModel.frontCard?.title, 'Work task');
+
+        await viewModel.selectGroup(TaskGroup.defaultId);
+        expect(viewModel.count, 1);
+        expect(viewModel.frontCard?.title, 'Default task');
+      });
+
+      test('renameGroup updates the service name', () async {
+        await viewModel.addGroup('Work');
+        final id = viewModel.selectedGroupId!;
+        await viewModel.renameGroup(id, 'Personal');
+        expect(viewModel.selectedGroupName, 'Personal');
+      });
+
+      test('renameGroup refuses to rename Default', () async {
+        viewModel.clearError();
+        await viewModel.renameGroup(TaskGroup.defaultId, 'Renamed');
+        expect(viewModel.hasError, isTrue);
+        expect(viewModel.selectedGroupName, TaskGroup.defaultName);
+      });
+
+      test('deleteGroupCascade removes group and its tasks', () async {
+        await viewModel.addGroup('Work');
+        final id = viewModel.selectedGroupId!;
+        await viewModel.addCard(title: 'Work task', tag: 'dev');
+        expect(viewModel.count, 1);
+
+        final removed = await viewModel.deleteGroupCascade(id);
+        expect(removed, 1);
+        expect(viewModel.groups.any((g) => g.id == id), isFalse);
+        expect(viewModel.selectedGroupId, TaskGroup.defaultId);
+      });
+
+      test('deleteGroupCascade refuses to delete Default', () async {
+        viewModel.clearError();
+        final removed = await viewModel.deleteGroupCascade(TaskGroup.defaultId);
+        expect(removed, isNull);
+        expect(viewModel.hasError, isTrue);
+        expect(viewModel.groups.any((g) => g.id == TaskGroup.defaultId), isTrue);
+      });
+
+      test('groupTaskCounts reflects current counts', () async {
+        await viewModel.addCard(title: 'A', tag: 'dev');
+        await viewModel.addCard(title: 'B', tag: 'dev');
+        expect(viewModel.groupTaskCounts[TaskGroup.defaultId], 2);
+        await viewModel.addGroup('Work');
+        await viewModel.addCard(title: 'W1', tag: 'dev');
+        expect(viewModel.groupTaskCounts[TaskGroup.defaultId], 2);
+        expect(viewModel.groupTaskCounts[viewModel.selectedGroupId!], 1);
+      });
     });
   });
 }
