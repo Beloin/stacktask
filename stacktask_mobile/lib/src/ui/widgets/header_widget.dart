@@ -29,14 +29,13 @@ class HeaderWidget extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
-              Flexible(
+              Expanded(
                 child: Text(
                   groupName,
                   style: Theme.of(context).textTheme.headlineLarge,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const Spacer(),
               TweenAnimationBuilder<double>(
                 tween: Tween(begin: 1.0, end: 1.0),
                 duration: const Duration(milliseconds: 200),
@@ -47,6 +46,7 @@ class HeaderWidget extends StatelessWidget {
                   );
                 },
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
                   children: [
