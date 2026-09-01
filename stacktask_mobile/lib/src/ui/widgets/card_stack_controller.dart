@@ -3,11 +3,25 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 
 class CardStackController extends ChangeNotifier {
+  CardStackController({
+    this.onCardTap,
+    this.onSwipeLeft,
+    this.onSwipeRight,
+    this.onFrontSwipeDown,
+    this.onMoveCard,
+  });
+
   static const double swipeThreshold = 120.0;
   static const double swipeDownThreshold = 100.0;
   static const double swipeVelocityThreshold = 500.0;
   static const double swipeOutDistance = 600.0;
   static const Duration swipeOutDuration = Duration(milliseconds: 400);
+
+  final ValueChanged<int>? onCardTap;
+  final VoidCallback? onSwipeLeft;
+  final VoidCallback? onSwipeRight;
+  final VoidCallback? onFrontSwipeDown;
+  final void Function(int from, int to)? onMoveCard;
 
   double _frontDragX = 0;
   double _frontDragY = 0;
@@ -57,8 +71,21 @@ class CardStackController extends ChangeNotifier {
   double get selectedDragY => _selectedDragY;
   Offset get selectedOffset => Offset(_selectedDragX, _selectedDragY);
 
+  int? _detailedViewIndex;
+  int? get detailedViewIndex => _detailedViewIndex;
+  bool get hasDetailedView => _detailedViewIndex != null;
+  bool isDetailedView(int index) => _detailedViewIndex == index;
+
+  void setDetailedView(int? index) {
+    if (_detailedViewIndex == index) return;
+    _detailedViewIndex = index;
+    notifyListeners();
+  }
+
+  void clearDetailedView() => setDetailedView(null);
+
   void select(int index) {
-    if (_isSwipingOut) return;
+    if (_isSwipingOut || hasDetailedView) return;
     _selectedIndex = index;
     _bypassedIndex = index;
     _selectedDragX = 0;
@@ -93,9 +120,6 @@ class CardStackController extends ChangeNotifier {
   int? _calcBypassedIndex() {
     if (_selectedIndex == null) return _selectedIndex;
     final from = _selectedIndex!;
-    // Each card slot is _cardSpacing pixels apart vertically.
-    // Dragging up (negative Y) past -_cardSpacing moves the card up by 1 slot.
-    // Dragging down (positive Y) past _cardSpacing moves the card down by 1 slot.
     const cardSpacing = 40.0;
     final steps = (-_selectedDragY / cardSpacing).floor();
     if (steps == 0) return from;
@@ -106,18 +130,23 @@ class CardStackController extends ChangeNotifier {
 
   void onSelectedDragEnd() {
     if (_selectedIndex == null) return;
+    final from = _selectedIndex;
+    final to = _bypassedIndex;
     _selectedDragX = 0;
     _selectedDragY = 0;
     _selectedIndex = null;
     _bypassedIndex = null;
     notifyListeners();
+    if (from != null && to != null && from != to) {
+      onMoveCard?.call(from, to);
+    }
   }
 
   bool _isFrontDragging = false;
   bool get isFrontDragging => _isFrontDragging;
 
   void onFrontDragStart() {
-    if (_isSwipingOut) return;
+    if (_isSwipingOut || hasDetailedView) return;
     _isFrontDragging = true;
     _frontDragX = 0;
     _frontDragY = 0;
@@ -125,7 +154,7 @@ class CardStackController extends ChangeNotifier {
   }
 
   void onFrontDragUpdate(Offset delta) {
-    if (_isSwipingOut) return;
+    if (_isSwipingOut || hasDetailedView) return;
     _frontDragX += delta.dx;
     _frontDragY += delta.dy;
     notifyListeners();
@@ -173,6 +202,14 @@ class CardStackController extends ChangeNotifier {
     return dir;
   }
 
+  void tapCard(int index) {
+    if (hasDetailedView) {
+      if (index == _detailedViewIndex) onCardTap?.call(index);
+      return;
+    }
+    onCardTap?.call(index);
+  }
+
   void reset() {
     _frontDragX = 0;
     _frontDragY = 0;
@@ -183,6 +220,7 @@ class CardStackController extends ChangeNotifier {
     _bypassedIndex = null;
     _selectedDragX = 0;
     _selectedDragY = 0;
+    _detailedViewIndex = null;
     notifyListeners();
   }
 }

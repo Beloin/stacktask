@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:stacktask_mobile/src/core/models/task_card.dart';
 import 'package:stacktask_mobile/src/core/models/task_tag.dart';
 import 'package:stacktask_mobile/src/core/theme/app_theme.dart';
+import 'package:stacktask_mobile/src/ui/widgets/card_scroll_picker.dart';
 import 'package:stacktask_mobile/src/ui/widgets/card_stack_controller.dart';
 import 'package:stacktask_mobile/src/ui/widgets/tag_pill_widget.dart';
 
@@ -31,11 +32,26 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
   static const double _cardSpacing = 40.0;
   static const double _bottomPadding = 80.0;
   static const double _swipeAffordanceReach = 120.0;
-  static const double _defaultFrontCardHeight = 320.0;
+  static const double _defaultCardHeight = 320.0;
+  static const double _liftFraction = 0.15;
 
-  final CardStackController _controller = CardStackController();
-  final GlobalKey _frontCardKey = GlobalKey();
-  double _frontCardHeight = _defaultFrontCardHeight;
+  late final CardStackController _controller;
+
+  final GlobalKey _frontMeasureKey = GlobalKey();
+  double _cardHeight = _defaultCardHeight;
+  double _screenHeight = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = CardStackController(
+      onCardTap: widget.onCardTap,
+      onSwipeLeft: widget.onSwipeLeft,
+      onSwipeRight: widget.onSwipeRight,
+      onFrontSwipeDown: widget.onFrontSwipeDown,
+      onMoveCard: widget.onMoveCard,
+    );
+  }
 
   @override
   void dispose() {
@@ -47,139 +63,231 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
   Widget build(BuildContext context) {
     if (widget.cards.isEmpty) return const SizedBox.shrink();
 
-    final totalCards = widget.cards.length;
-    final controller = _controller;
-
     return LayoutBuilder(
       builder: (context, constraints) {
-        final cardWidth = constraints.maxWidth * 0.88;
-        final cardLeft = (constraints.maxWidth - cardWidth) / 2;
-        final frontCardTop =
-            constraints.maxHeight - _bottomPadding - _frontCardHeight;
-
+        _screenHeight = constraints.maxHeight;
         WidgetsBinding.instance
-            .addPostFrameCallback((_) => _measureFrontCard());
+            .addPostFrameCallback((_) => _measureCard());
 
         return Stack(
           clipBehavior: Clip.none,
           children: [
-            for (int i = totalCards - 1; i >= 0; i--)
-              Positioned(
-                bottom: i == 0 ? _bottomPadding : null,
-                top: i == 0 ? null : frontCardTop - i * _cardSpacing,
-                left: cardLeft,
-                child: SizedBox(
-                  width: cardWidth,
-                  key: i == 0 ? _frontCardKey : null,
-                  child: i == 0
-                      ? _buildFrontCard(
-                          widget.cards[0],
-                          constraints.maxWidth,
-                          controller,
-                        )
-                      : _buildBackgroundCard(
-                          widget.cards[i],
-                          i,
-                          constraints.maxWidth,
-                          controller,
-                        ),
-                ),
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _controller.clearDetailedView(),
+                child: _buildCardsLayer(constraints),
               ),
+            ),
+            Positioned(
+              top: constraints.maxHeight / 6,
+              bottom: constraints.maxHeight / 6,
+              right: 0,
+              width: 40,
+              child: CardScrollPicker(
+                cardCount: widget.cards.length,
+                onIndexChanged: (index) {
+                  if (index == null) {
+                    _controller.clearDetailedView();
+                  } else {
+                    _controller.setDetailedView(index);
+                  }
+                },
+              ),
+            ),
           ],
         );
       },
     );
   }
 
-  void _measureFrontCard() {
-    final renderObject = _frontCardKey.currentContext?.findRenderObject();
-    if (renderObject is RenderBox && renderObject.hasSize) {
-      final height = renderObject.size.height;
-      if (height > 0 && (height - _frontCardHeight).abs() > 0.5) {
-        setState(() => _frontCardHeight = height);
+  void _measureCard() {
+    final render = _frontMeasureKey.currentContext?.findRenderObject();
+    if (render is RenderBox && render.hasSize) {
+      final h = render.size.height;
+      if (h > 0 && (h - _cardHeight).abs() > 0.5) {
+        setState(() => _cardHeight = h);
       }
     }
   }
 
-  Widget _buildFrontCard(
-    TaskCard card,
-    double areaWidth,
-    CardStackController controller,
-  ) {
+  Widget _buildCardsLayer(BoxConstraints constraints) {
+    final totalCards = widget.cards.length;
+    final cardWidth = constraints.maxWidth * 0.88;
+    final cardLeft = (constraints.maxWidth - cardWidth) / 2;
+    final frontCardTop =
+        constraints.maxHeight - _bottomPadding - _cardHeight;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        for (int i = totalCards - 1; i >= 0; i--)
+          Positioned(
+            bottom: i == 0 ? _bottomPadding : null,
+            top: i == 0 ? null : frontCardTop - i * _cardSpacing,
+            left: cardLeft,
+            child: SizedBox(
+              width: cardWidth,
+              child: _buildCard(
+                widget.cards[i],
+                i,
+                constraints.maxWidth,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  double _opacityFor(int index, int? detailedIndex) {
+    if (detailedIndex == null) return 1.0;
+    if (index == detailedIndex) return 1.0;
+    if (index == detailedIndex + 1) return 1.0;
+    return 0.35;
+  }
+
+  Widget _buildCard(TaskCard card, int index, double areaWidth) {
+    final isFront = index == 0;
+
     return ListenableBuilder(
-      listenable: controller,
+      listenable: _controller,
       builder: (context, _) {
-        final target = controller.isSwipingOut
-            ? controller.swipeOutTarget
-            : controller.frontOffset;
-        final isSelected = controller.isSelected(0);
+        final isDetailed = _controller.isDetailedView(index);
+        final liftY =
+            isDetailed && !isFront ? _screenHeight * _liftFraction : 0.0;
+        final isSelected = _controller.isSelected(index);
+        final isBypassed = _controller.isBypassed(index);
         final selectedHasOffset =
-            isSelected && controller.selectedOffset != Offset.zero;
-        final dragX = controller.frontDragX;
-        final isDraggingHorizontally = controller.isFrontDragging && dragX.abs() > 4;
+            isSelected && _controller.selectedOffset != Offset.zero;
+        final opacity = isBypassed
+            ? 0.4
+            : _opacityFor(index, _controller.detailedViewIndex);
+        final dragX = _controller.frontDragX;
+        final isDraggingHorizontally =
+            _controller.isFrontDragging && dragX.abs() > 4;
 
         return GestureDetector(
-          onTap: () => widget.onCardTap?.call(0),
-          onHorizontalDragStart: (_) => controller.onFrontDragStart(),
-          onHorizontalDragUpdate: (d) => controller.onFrontDragUpdate(d.delta),
-          onHorizontalDragEnd: (d) => _handleFrontDragEnd(d, controller),
-          onVerticalDragStart: (_) => controller.onFrontDragStart(),
-          onVerticalDragUpdate: (d) => controller.onFrontDragUpdate(d.delta),
-          onVerticalDragEnd: (d) => _handleFrontDragEnd(d, controller),
-          onLongPressStart: (_) => controller.select(0),
-          onLongPressMoveUpdate: (d) =>
-              controller.onSelectedDragUpdate(d.offsetFromOrigin),
-          onLongPressEnd: (_) => _handleSelectedDragEnd(controller),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _controller.tapCard(index),
+          onHorizontalDragStart: isFront && !isDetailed
+              ? (_) => _controller.onFrontDragStart()
+              : null,
+          onHorizontalDragUpdate: isFront && !isDetailed
+              ? (d) => _controller.onFrontDragUpdate(d.delta)
+              : null,
+          onHorizontalDragEnd: isFront && !isDetailed
+              ? (d) => _handleFrontDragEnd(d)
+              : null,
+          onVerticalDragStart: isFront && !isDetailed
+              ? (_) => _controller.onFrontDragStart()
+              : null,
+          onVerticalDragUpdate: isFront && !isDetailed
+              ? (d) => _controller.onFrontDragUpdate(d.delta)
+              : null,
+          onVerticalDragEnd: isFront && !isDetailed
+              ? (d) => _handleFrontDragEnd(d)
+              : null,
+          onLongPressStart: isDetailed
+              ? null
+              : (_) => _controller.select(index),
+          onLongPressMoveUpdate: isDetailed
+              ? null
+              : (d) => _controller.onSelectedDragUpdate(d.offsetFromOrigin),
+          onLongPressEnd:
+              isDetailed ? null : (_) => _controller.onSelectedDragEnd(),
           child: SizedBox(
             width: areaWidth,
             child: Stack(
               alignment: Alignment.center,
               clipBehavior: Clip.none,
               children: [
-                _buildSwipeAffordance(
-                  isLeft: true,
-                  isDragging: isDraggingHorizontally,
-                  dragX: dragX,
-                ),
+                if (isFront)
+                  _buildSwipeAffordance(
+                    isLeft: true,
+                    isDragging: isDraggingHorizontally,
+                    dragX: dragX,
+                  ),
                 TweenAnimationBuilder<Offset>(
-                  tween: Tween<Offset>(begin: target, end: target),
-                  duration: controller.isSwipingOut
-                      ? CardStackController.swipeOutDuration
-                      : const Duration(milliseconds: 200),
-                  curve: Curves.easeOut,
-                  builder: (context, animatedOffset, child) {
-                    return Opacity(
-                      opacity: controller.isSwipingOut
-                          ? 0.0
-                          : isSelected
-                              ? 1.0
-                              : 1.0,
-                      child: Transform.translate(
-                        offset: isSelected
-                            ? controller.selectedOffset
-                            : animatedOffset,
-                        child: Transform.scale(
-                          scale: isSelected ? 1.05 : 1.0,
-                          child: child,
-                        ),
-                      ),
+                  tween: Tween<Offset>(
+                    begin: Offset.zero,
+                    end: Offset(0, -liftY),
+                  ),
+                  duration: const Duration(milliseconds: 160),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, animatedLift, child) {
+                    return Transform.translate(
+                      offset: animatedLift,
+                      child: child,
                     );
                   },
-                  child: _buildCardShell(
-                    card,
-                    showSelectionBorder: selectedHasOffset,
+                  child: AnimatedScale(
+                    scale: isSelected ? 1.05 : 1.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Transform.translate(
+                      offset: isSelected
+                          ? _controller.selectedOffset
+                          : Offset.zero,
+                      child: AnimatedOpacity(
+                        duration: const Duration(milliseconds: 200),
+                        opacity: opacity,
+                        child: isFront
+                            ? _buildSwipeableFront(card, isSelected,
+                                selectedHasOffset, isDetailed)
+                            : _buildCardShell(
+                                card,
+                                showSelectionBorder: selectedHasOffset,
+                                detailedOutline: isDetailed,
+                              ),
+                      ),
+                    ),
                   ),
                 ),
-                _buildSwipeAffordance(
-                  isLeft: false,
-                  isDragging: isDraggingHorizontally,
-                  dragX: dragX,
-                ),
+                if (isFront)
+                  _buildSwipeAffordance(
+                    isLeft: false,
+                    isDragging: isDraggingHorizontally,
+                    dragX: dragX,
+                  ),
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildSwipeableFront(
+    TaskCard card,
+    bool isSelected,
+    bool selectedHasOffset,
+    bool isDetailed,
+  ) {
+    final target = _controller.isSwipingOut
+        ? _controller.swipeOutTarget
+        : _controller.frontOffset;
+
+    return TweenAnimationBuilder<Offset>(
+      key: ValueKey(card.id),
+      tween: Tween<Offset>(begin: target, end: target),
+      duration: _controller.isSwipingOut
+          ? CardStackController.swipeOutDuration
+          : const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+      builder: (context, animatedOffset, child) {
+        return Opacity(
+          opacity: _controller.isSwipingOut ? 0.0 : 1.0,
+          child: Transform.translate(
+            offset: isSelected ? Offset.zero : animatedOffset,
+            child: child,
+          ),
+        );
+      },
+      child: _buildCardShell(
+        card,
+        showSelectionBorder: selectedHasOffset,
+        detailedOutline: isDetailed,
+        key: _frontMeasureKey,
+      ),
     );
   }
 
@@ -260,11 +368,9 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
     );
   }
 
-  void _handleFrontDragEnd(
-    DragEndDetails details,
-    CardStackController controller,
-  ) {
-    final result = controller.onFrontDragEnd(details.velocity.pixelsPerSecond);
+  void _handleFrontDragEnd(DragEndDetails details) {
+    final result =
+        _controller.onFrontDragEnd(details.velocity.pixelsPerSecond);
     if (result == FrontDragResult.none) return;
 
     final direction = switch (result) {
@@ -274,76 +380,32 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
       FrontDragResult.none => SwipeOutDirection.none,
     };
 
-    controller.beginSwipeOut(direction);
+    _controller.beginSwipeOut(direction);
 
     Future.delayed(CardStackController.swipeOutDuration, () {
       if (!mounted) return;
-      controller.completeSwipeOut();
+      _controller.completeSwipeOut();
       switch (direction) {
         case SwipeOutDirection.left:
-          widget.onSwipeLeft?.call();
+          _controller.onSwipeLeft?.call();
         case SwipeOutDirection.right:
-          widget.onSwipeRight?.call();
+          _controller.onSwipeRight?.call();
         case SwipeOutDirection.down:
-          widget.onFrontSwipeDown?.call();
+          _controller.onFrontSwipeDown?.call();
         case SwipeOutDirection.none:
           break;
       }
     });
   }
 
-  void _handleSelectedDragEnd(CardStackController controller) {
-    final from = controller.selectedIndex;
-    final to = controller.bypassedIndex;
-    controller.onSelectedDragEnd();
-    if (from != null && to != null && from != to) {
-      widget.onMoveCard?.call(from, to);
-    }
-  }
-
-  Widget _buildBackgroundCard(
-    TaskCard card,
-    int index,
-    double areaWidth,
-    CardStackController controller,
-  ) {
-    return ListenableBuilder(
-      listenable: controller,
-      builder: (context, _) {
-        final isSelected = controller.isSelected(index);
-        final isBypassed = controller.isBypassed(index);
-        final selectedHasOffset =
-            isSelected && controller.selectedOffset != Offset.zero;
-        final opacity = isBypassed ? 0.4 : 1.0;
-
-        return GestureDetector(
-          onTap: () => widget.onCardTap?.call(index),
-          onLongPressStart: (_) => controller.select(index),
-          onLongPressMoveUpdate: (d) =>
-              controller.onSelectedDragUpdate(d.offsetFromOrigin),
-          onLongPressEnd: (_) => _handleSelectedDragEnd(controller),
-          child: AnimatedScale(
-            scale: isSelected ? 1.05 : 1.0,
-            duration: const Duration(milliseconds: 200),
-            child: Transform.translate(
-              offset: isSelected ? controller.selectedOffset : Offset.zero,
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 200),
-                opacity: opacity,
-                child: _buildCardShell(
-                  card,
-                  showSelectionBorder: selectedHasOffset,
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildCardShell(TaskCard card, {bool showSelectionBorder = false}) {
+  Widget _buildCardShell(
+    TaskCard card, {
+    bool showSelectionBorder = false,
+    bool detailedOutline = false,
+    Key? key,
+  }) {
     return Container(
+      key: key,
       decoration: BoxDecoration(
         color: AppColors.cardSurface,
         borderRadius: BorderRadius.circular(20),
@@ -352,8 +414,19 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
                 color: AppColors.accent.withValues(alpha: 0.6),
                 width: 2,
               )
-            : null,
+            : detailedOutline
+                ? Border.all(
+                    color: AppColors.success.withValues(alpha: 0.95),
+                    width: 3,
+                  )
+                : null,
         boxShadow: [
+          if (detailedOutline)
+            BoxShadow(
+              color: AppColors.success.withValues(alpha: 0.35),
+              blurRadius: 28,
+              spreadRadius: 1,
+            ),
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.18),
             blurRadius: 32,
