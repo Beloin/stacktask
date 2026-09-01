@@ -122,9 +122,10 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
       clipBehavior: Clip.none,
       children: [
         for (int i = totalCards - 1; i >= 0; i--)
-          Positioned(
-            bottom: i == 0 ? _bottomPadding : null,
-            top: i == 0 ? null : frontCardTop - i * _cardSpacing,
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 240),
+            curve: Curves.easeOutCubic,
+            top: frontCardTop - i * _cardSpacing,
             left: cardLeft,
             child: SizedBox(
               width: cardWidth,
@@ -153,6 +154,7 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
       listenable: _controller,
       builder: (context, _) {
         final isDetailed = _controller.isDetailedView(index);
+        final isExpanded = isFront || isDetailed;
         final liftY =
             isDetailed && !isFront ? _screenHeight * _liftFraction : 0.0;
         final isSelected = _controller.isSelected(index);
@@ -237,6 +239,7 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
                                 card,
                                 showSelectionBorder: selectedHasOffset,
                                 detailedOutline: isDetailed,
+                                expanded: isExpanded,
                               ),
                       ),
                     ),
@@ -287,6 +290,7 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
         showSelectionBorder: selectedHasOffset,
         detailedOutline: isDetailed,
         key: _frontMeasureKey,
+        expanded: true,
       ),
     );
   }
@@ -402,6 +406,7 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
     TaskCard card, {
     bool showSelectionBorder = false,
     bool detailedOutline = false,
+    bool expanded = false,
     Key? key,
   }) {
     return Container(
@@ -434,11 +439,11 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
           ),
         ],
       ),
-      child: _buildCardBody(card),
+      child: _buildCardBody(card, expanded: expanded),
     );
   }
 
-  Widget _buildCardBody(TaskCard card) {
+  Widget _buildCardBody(TaskCard card, {required bool expanded}) {
     final tag = TaskTag.fromName(card.tag);
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
@@ -456,10 +461,10 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
               color: AppColors.textPrimary,
               height: 1.25,
             ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
+            maxLines: expanded ? null : 2,
+            overflow: expanded ? TextOverflow.visible : TextOverflow.ellipsis,
           ),
-          if (card.description.isNotEmpty) ...[
+          if (expanded && card.description.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
               card.description,
@@ -469,8 +474,6 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
                 color: AppColors.textSecondary,
                 height: 1.5,
               ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
             ),
           ],
           const SizedBox(height: 14),
