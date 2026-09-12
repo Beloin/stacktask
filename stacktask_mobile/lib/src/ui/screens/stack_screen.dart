@@ -5,6 +5,8 @@ import 'package:stacktask_mobile/src/core/models/task_card.dart';
 import 'package:stacktask_mobile/src/core/models/task_group.dart';
 import 'package:stacktask_mobile/src/core/repositories/group_repository.dart';
 import 'package:stacktask_mobile/src/core/repositories/stack_repository.dart';
+import 'package:stacktask_mobile/src/core/state/main_state.dart';
+import 'package:stacktask_mobile/src/core/state/state_service.dart';
 import 'package:stacktask_mobile/src/core/theme/app_theme.dart';
 import 'package:stacktask_mobile/src/ui/view_models/stack_view_model.dart';
 import 'package:stacktask_mobile/src/ui/screens/add_task_screen.dart';
@@ -20,12 +22,14 @@ import 'package:stacktask_mobile/src/ui/widgets/new_group_sheet.dart';
 import 'package:stacktask_mobile/src/ui/widgets/task_detail_modal.dart';
 
 class StackScreen extends StatelessWidget {
-  const StackScreen({super.key});
+  final StateService stateService;
+
+  const StackScreen({super.key, required this.stateService});
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<StackViewModel>(
-      future: _createViewModel(),
+      future: _createViewModel(stateService),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Scaffold(
@@ -45,7 +49,7 @@ class StackScreen extends StatelessWidget {
     );
   }
 
-  Future<StackViewModel> _createViewModel() async {
+  Future<StackViewModel> _createViewModel(StateService stateService) async {
     final dbHelper = DatabaseHelper.instance;
     final db = await dbHelper.database;
     final stackRepository = StackRepository(database: db);
@@ -53,9 +57,12 @@ class StackScreen extends StatelessWidget {
       database: db,
       stackRepository: stackRepository,
     );
+    final initialGroupId = stateService.get<MainState>()?.group;
     final vm = StackViewModel(
       repository: stackRepository,
       groupRepository: groupRepository,
+      stateService: stateService,
+      initialSelectedGroupId: initialGroupId,
     );
     await vm.bootstrap();
     return vm;

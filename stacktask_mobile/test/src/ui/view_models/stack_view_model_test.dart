@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:stacktask_mobile/src/core/database/database_helper.dart';
 import 'package:stacktask_mobile/src/core/models/task_group.dart';
@@ -6,6 +7,8 @@ import 'package:stacktask_mobile/src/core/repositories/group_repository.dart';
 import 'package:stacktask_mobile/src/core/repositories/stack_repository.dart';
 import 'package:stacktask_mobile/src/core/services/stack_service.dart';
 import 'package:stacktask_mobile/src/core/services/task_group_service.dart';
+import 'package:stacktask_mobile/src/core/state/main_state.dart';
+import 'package:stacktask_mobile/src/core/state/state_service.dart';
 import 'package:stacktask_mobile/src/ui/view_models/stack_view_model.dart';
 
 Future<Database> _createTestDatabase() async {
@@ -57,8 +60,14 @@ void main() {
   group('StackViewModel', () {
     late StackViewModel viewModel;
     late Database db;
+    late StateService stateService;
 
     setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      stateService = StateService(prefs);
+      stateService.register<MainState>(MainState.fromJson);
+
       db = await _createTestDatabase();
       final repository = StackRepository(database: db);
       final groupRepository = GroupRepository(
@@ -68,6 +77,7 @@ void main() {
       viewModel = StackViewModel(
         repository: repository,
         groupRepository: groupRepository,
+        stateService: stateService,
         service: StackService(),
         groupService: TaskGroupService(),
       );
@@ -347,6 +357,31 @@ void main() {
         await viewModel.addCard(title: 'W1', tag: 'dev');
         expect(viewModel.groupTaskCounts[TaskGroup.defaultId], 2);
         expect(viewModel.groupTaskCounts[viewModel.selectedGroupId!], 1);
+      });
+    });
+
+    group('persistence', () {
+      test('restores selected group on relaunch via initialSelectedGroupId',
+          () async {
+        await viewModel.addGroup('Work');
+        final workId = viewModel.selectedGroupId!;
+        expect(viewModel.selectedGroupName, 'Work');
+
+        // Simulate relaunch: new VM with the restored initialSelectedGroupId.
+        final repository2 = StackRepository(database: db);
+        final groupRepository2 = GroupRepository(
+          database: db,
+          stackRepository: repository2,
+        );
+        final vm2 = StackViewModel(
+          repository: repository2,
+          groupRepository: groupRepository2,
+          stateService: stateService,
+          initialSelectedGroupId: stateService.get<MainState>()?.group,
+        );
+        await vm2.bootstrap();
+        expect(vm2.selectedGroupId, workId);
+        expect(vm2.selectedGroupName, 'Work');
       });
     });
   });

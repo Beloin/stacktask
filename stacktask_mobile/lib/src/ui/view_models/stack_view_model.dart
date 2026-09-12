@@ -8,6 +8,8 @@ import 'package:stacktask_mobile/src/core/repositories/stack_repository.dart';
 import 'package:stacktask_mobile/src/core/result/result_barrel.dart';
 import 'package:stacktask_mobile/src/core/services/stack_service.dart';
 import 'package:stacktask_mobile/src/core/services/task_group_service.dart';
+import 'package:stacktask_mobile/src/core/state/main_state.dart';
+import 'package:stacktask_mobile/src/core/state/state_service.dart';
 
 enum SwipeDirection { left, right, down }
 
@@ -16,6 +18,7 @@ class StackViewModel extends ChangeNotifier {
   final StackRepository _repository;
   final TaskGroupService _groupService;
   final GroupRepository _groupRepository;
+  final StateService _stateService;
   final Uuid _uuid;
 
   bool _isModalOpen = false;
@@ -28,6 +31,7 @@ class StackViewModel extends ChangeNotifier {
   StackViewModel({
     required StackRepository repository,
     required GroupRepository groupRepository,
+    required StateService stateService,
     StackService? service,
     TaskGroupService? groupService,
     Uuid? uuid,
@@ -35,6 +39,7 @@ class StackViewModel extends ChangeNotifier {
   })  : _service = service ?? StackService(),
         _repository = repository,
         _groupRepository = groupRepository,
+        _stateService = stateService,
         _groupService = groupService ?? TaskGroupService(),
         _uuid = uuid ?? const Uuid(),
         _selectedGroupId = initialSelectedGroupId;
@@ -84,12 +89,16 @@ class StackViewModel extends ChangeNotifier {
           _selectedGroupId = value.isNotEmpty ? value.first.id : null;
         }
         await _refreshGroupCounts();
+        await _persistSelectedGroup();
         notifyListeners();
       case Failure(:final error):
         _lastError = error;
         notifyListeners();
     }
   }
+
+  Future<void> _persistSelectedGroup() =>
+      _stateService.save<MainState>(MainState(group: _selectedGroupId));
 
   Future<void> _refreshGroupCounts() async {
     final result = await _groupRepository.taskCountByGroup();
@@ -133,6 +142,7 @@ class StackViewModel extends ChangeNotifier {
   Future<void> selectGroup(String groupId) async {
     if (_selectedGroupId == groupId) return;
     _selectedGroupId = groupId;
+    await _persistSelectedGroup();
     notifyListeners();
     await loadCards();
   }
@@ -143,6 +153,7 @@ class StackViewModel extends ChangeNotifier {
       case Success(:final value):
         _groupService.add(value);
         _selectedGroupId = value.id;
+        await _persistSelectedGroup();
         await _refreshGroupCounts();
         notifyListeners();
         await loadCards();
@@ -176,6 +187,7 @@ class StackViewModel extends ChangeNotifier {
               ? _groupService.all.first.id
               : TaskGroup.defaultId;
           _selectedGroupId = fallback;
+          await _persistSelectedGroup();
         }
         await _refreshGroupCounts();
         notifyListeners();
