@@ -15,7 +15,6 @@ class CardStackWidget2 extends StatefulWidget {
   final void Function(int fromIndex, int toIndex)? onMoveCard;
   final bool readOnly;
   final bool inverted;
-  final bool showDescriptionOnFirstCard;
 
   const CardStackWidget2({
     super.key,
@@ -27,7 +26,6 @@ class CardStackWidget2 extends StatefulWidget {
     this.onMoveCard,
     this.readOnly = false,
     this.inverted = false,
-    this.showDescriptionOnFirstCard = true,
   });
 
   @override
@@ -41,6 +39,7 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
   static const double _defaultCardHeight = 320.0;
   static const double _liftFraction = 0.15;
   static const double _invertedTopPadding = 30.0;
+  static const int _maxDescriptionChars = 75;
 
   late final CardStackController _controller;
 
@@ -259,13 +258,8 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
                         duration: const Duration(milliseconds: 200),
                         opacity: opacity,
                         child: isFront
-                            ? _buildSwipeableFront(
-                                card,
-                                isSelected,
-                                selectedHasOffset,
-                                isDetailed,
-                                widget.showDescriptionOnFirstCard,
-                              )
+                            ? _buildSwipeableFront(card, isSelected,
+                                selectedHasOffset, isDetailed)
                             : _buildCardShell(
                                 card,
                                 showSelectionBorder: selectedHasOffset,
@@ -295,7 +289,6 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
     bool isSelected,
     bool selectedHasOffset,
     bool isDetailed,
-    bool showDescription,
   ) {
     final target = _controller.isSwipingOut
         ? _controller.swipeOutTarget
@@ -323,7 +316,6 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
         detailedOutline: isDetailed,
         key: _frontMeasureKey,
         expanded: true,
-        showDescription: showDescription,
       ),
     );
   }
@@ -442,7 +434,6 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
     bool showSelectionBorder = false,
     bool detailedOutline = false,
     bool expanded = false,
-    bool showDescription = true,
     Key? key,
   }) {
     return Container(
@@ -475,19 +466,11 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
           ),
         ],
       ),
-      child: _buildCardBody(
-        card,
-        expanded: expanded,
-        showDescription: showDescription,
-      ),
+      child: _buildCardBody(card, expanded: expanded),
     );
   }
 
-  Widget _buildCardBody(
-    TaskCard card, {
-    required bool expanded,
-    bool showDescription = true,
-  }) {
+  Widget _buildCardBody(TaskCard card, {required bool expanded}) {
     final tag = TaskTag.fromName(card.tag);
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
@@ -508,10 +491,10 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
             maxLines: expanded ? null : 2,
             overflow: expanded ? TextOverflow.visible : TextOverflow.ellipsis,
           ),
-          if (expanded && showDescription && card.description.isNotEmpty) ...[
+          if (expanded && card.description.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
-              card.description,
+              _truncateDescription(card.description),
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w400,
@@ -555,5 +538,10 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
         ],
       ),
     );
+  }
+
+  String _truncateDescription(String description) {
+    if (description.length <= _maxDescriptionChars) return description;
+    return '${description.substring(0, _maxDescriptionChars)}...';
   }
 }

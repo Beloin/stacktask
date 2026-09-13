@@ -213,7 +213,6 @@ class _CardArea extends StatelessWidget {
                           cards: cards,
                           readOnly: true,
                           inverted: true,
-                          showDescriptionOnFirstCard: false,
                           onCardTap: (i) =>
                               _openArchiveDetailModal(context, vm, i),
                         )
