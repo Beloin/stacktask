@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:stacktask_mobile/src/core/database/database_helper.dart';
 import 'package:stacktask_mobile/src/core/models/task_group.dart';
+import 'package:stacktask_mobile/src/core/models/task_status.dart';
 import 'package:stacktask_mobile/src/core/repositories/group_repository.dart';
 import 'package:stacktask_mobile/src/core/repositories/stack_repository.dart';
 import 'package:stacktask_mobile/src/core/services/stack_service.dart';
@@ -10,6 +11,7 @@ import 'package:stacktask_mobile/src/core/services/task_group_service.dart';
 import 'package:stacktask_mobile/src/core/state/main_state.dart';
 import 'package:stacktask_mobile/src/core/state/state_service.dart';
 import 'package:stacktask_mobile/src/ui/view_models/stack_view_model.dart';
+import '../../test_helpers.dart';
 
 Future<Database> _createTestDatabase() async {
   final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
@@ -33,7 +35,7 @@ Future<Database> _createTestDatabase() async {
       tag TEXT NOT NULL,
       time_estimate TEXT,
       priority INTEGER NOT NULL DEFAULT 1,
-      is_done INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'doing',
       position INTEGER NOT NULL,
       group_id TEXT NOT NULL,
       created_at TEXT NOT NULL
@@ -61,6 +63,7 @@ void main() {
     late StackViewModel viewModel;
     late Database db;
     late StateService stateService;
+    late StackRepository repository;
 
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
@@ -69,7 +72,7 @@ void main() {
       stateService.register<MainState>(MainState.fromJson);
 
       db = await _createTestDatabase();
-      final repository = StackRepository(database: db);
+      repository = StackRepository(database: db);
       final groupRepository = GroupRepository(
         database: db,
         stackRepository: repository,
@@ -123,17 +126,49 @@ void main() {
       expect(viewModel.count, StackService.maxCards);
     });
 
-    test('dismissCard removes front card', () async {
-      await viewModel.addCard(title: 'First', tag: 'dev');
-      await viewModel.addCard(title: 'Second', tag: 'bug');
-      await viewModel.dismissCard(SwipeDirection.left);
+    test('markCardAsDone removes card from active stack and marks it done',
+        () async {
+      await viewModel.addCard(title: 'To complete', tag: 'dev');
       expect(viewModel.count, 1);
-      expect(viewModel.frontCard?.title, 'First');
+      expect(viewModel.cards[0].status, TaskStatus.doing);
+      final cardId = viewModel.cards[0].id;
+      await viewModel.markCardAsDone(0);
+      expect(viewModel.count, 0);
+      expect(viewModel.doneCount, 1);
+
+      final archived = await repository.searchArchivedCards(
+        status: TaskStatus.done,
+      );
+      archived.when(
+        success: (cards) {
+          expect(cards.length, 1);
+          expect(cards.first.id, cardId);
+          expect(cards.first.status, TaskStatus.done);
+        },
+        failure: (error) => fail('Should not fail: $error'),
+      );
     });
 
-    test('dismissCard on empty stack does nothing', () async {
-      await viewModel.dismissCard(SwipeDirection.right);
+    test('ignoreCardAt removes card from stack and marks it ignored',
+        () async {
+      await viewModel.addCard(title: 'To ignore', tag: 'dev');
+      expect(viewModel.count, 1);
+      final cardId = viewModel.cards[0].id;
+      await viewModel.ignoreCardAt(0);
       expect(viewModel.count, 0);
+      expect(viewModel.ignoredCount, 1);
+
+      final archived = await repository.searchArchivedCards(
+        status: TaskStatus.ignored,
+      );
+      archived.when(
+        success: (cards) {
+          expect(cards.length, 1);
+          expect(cards.first.id, cardId);
+          expect(cards.first.status, TaskStatus.ignored);
+        },
+        failure: (error) => fail('Should not fail: $error'),
+      );
     });
 
     test('removeCardAt removes card at given index', () async {
@@ -142,6 +177,14 @@ void main() {
       await viewModel.addCard(title: 'C', tag: 'dev');
       await viewModel.removeCardAt(1);
       expect(viewModel.count, 2);
+    });
+
+    test('markCardAsDone on invalid index is a no-op', () async {
+      await viewModel.addCard(title: 'X', tag: 'dev');
+      await viewModel.markCardAsDone(99);
+      expect(viewModel.count, 1);
+      await viewModel.markCardAsDone(-1);
+      expect(viewModel.count, 1);
     });
 
     test('promoteToFront moves card to front', () async {
@@ -182,23 +225,6 @@ void main() {
       await viewModel.addCard(title: 'C', tag: 'dev');
       await viewModel.moveCardTo(2, 0);
       expect(viewModel.cards[0].title, 'A');
-    });
-
-    test('markCardAsDone removes card from active stack and marks it done',
-        () async {
-      await viewModel.addCard(title: 'To complete', tag: 'dev');
-      expect(viewModel.count, 1);
-      expect(viewModel.cards[0].isDone, isFalse);
-      await viewModel.markCardAsDone(0);
-      expect(viewModel.count, 0);
-    });
-
-    test('markCardAsDone on invalid index is a no-op', () async {
-      await viewModel.addCard(title: 'X', tag: 'dev');
-      await viewModel.markCardAsDone(99);
-      expect(viewModel.count, 1);
-      await viewModel.markCardAsDone(-1);
-      expect(viewModel.count, 1);
     });
 
     test('updateCard changes fields in place and keeps id', () async {
@@ -382,6 +408,133 @@ void main() {
         await vm2.bootstrap();
         expect(vm2.selectedGroupId, workId);
         expect(vm2.selectedGroupName, 'Work');
+      });
+    });
+
+    group('archive mode', () {
+      test('openArchive loads newest cards first', () async {
+        await viewModel.addCard(title: 'Old card', tag: 'dev');
+        final oldId = viewModel.cards[0].id;
+        await viewModel.markCardAsDone(0);
+        await viewModel.addCard(title: 'New card', tag: 'dev');
+        final newId = viewModel.cards[0].id;
+        await viewModel.markCardAsDone(0);
+
+        await viewModel.openArchive(TaskStatus.done);
+        expect(viewModel.isArchiveMode, isTrue);
+        expect(viewModel.archiveStatus, TaskStatus.done);
+        expect(viewModel.selectedGroupName, 'DONE');
+        expect(viewModel.archivedCards.length, 2);
+        expect(viewModel.archivedCards.first.id, newId);
+        expect(viewModel.archivedCards.last.id, oldId);
+      });
+
+      test('openArchive limits to 8 cards', () async {
+        for (int i = 0; i < 12; i++) {
+          await viewModel.addCard(title: 'Task $i', tag: 'dev');
+          await viewModel.markCardAsDone(0);
+        }
+        await viewModel.openArchive(TaskStatus.done);
+        expect(viewModel.archivedCards.length, 8);
+        expect(viewModel.archivedCards.first.title, 'Task 11');
+      });
+
+      test('selectGroup exits archive mode', () async {
+        await viewModel.addCard(title: 'X', tag: 'dev');
+        await viewModel.markCardAsDone(0);
+        await viewModel.openArchive(TaskStatus.done);
+        expect(viewModel.isArchiveMode, isTrue);
+
+        await viewModel.selectGroup(TaskGroup.defaultId);
+        expect(viewModel.isArchiveMode, isFalse);
+        expect(viewModel.archiveStatus, isNull);
+        expect(viewModel.archivedCards, isEmpty);
+        expect(viewModel.selectedGroupName, TaskGroup.defaultName);
+      });
+
+      test('updateArchiveSearch filters after debounce', () async {
+        await viewModel.addCard(
+          title: 'Alpha task',
+          tag: 'dev',
+          description: 'about taxes',
+        );
+        await viewModel.markCardAsDone(0);
+        await viewModel.addCard(
+          title: 'Beta task',
+          tag: 'dev',
+          description: 'about meetings',
+        );
+        await viewModel.markCardAsDone(0);
+        await viewModel.openArchive(TaskStatus.done);
+        expect(viewModel.archivedCards.length, 2);
+
+        await viewModel.updateArchiveSearch('Alpha');
+        await Future<void>.delayed(
+          StackViewModel.searchDebounce + const Duration(milliseconds: 50),
+        );
+        expect(viewModel.archivedCards.length, 1);
+        expect(viewModel.archivedCards.first.title, 'Alpha task');
+
+        await viewModel.updateArchiveSearch('taxes');
+        await Future<void>.delayed(
+          StackViewModel.searchDebounce + const Duration(milliseconds: 50),
+        );
+        expect(viewModel.archivedCards.length, 1);
+        expect(viewModel.archivedCards.first.title, 'Alpha task');
+      });
+
+      test('updateArchiveSearch coalesces rapid keystrokes', () async {
+        await viewModel.addCard(title: 'Alpha task', tag: 'dev');
+        await viewModel.markCardAsDone(0);
+        await viewModel.openArchive(TaskStatus.done);
+        expect(viewModel.archivedCards.length, 1);
+
+        bool notified = false;
+        viewModel.addListener(() => notified = true);
+        await viewModel.updateArchiveSearch('A');
+        await viewModel.updateArchiveSearch('Al');
+        await viewModel.updateArchiveSearch('Alp');
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        expect(notified, isFalse);
+
+        await Future<void>.delayed(
+          StackViewModel.searchDebounce + const Duration(milliseconds: 50),
+        );
+        expect(notified, isTrue);
+        expect(viewModel.archivedCards.length, 1);
+      });
+
+      test('closeArchive returns to the selected group stack', () async {
+        await viewModel.addCard(title: 'Active', tag: 'dev');
+        await viewModel.addCard(title: 'Done one', tag: 'dev');
+        final doneId = viewModel.cards[0].id;
+        await viewModel.markCardAsDone(0);
+        expect(viewModel.count, 1);
+
+        await viewModel.openArchive(TaskStatus.done);
+        await viewModel.closeArchive();
+        expect(viewModel.isArchiveMode, isFalse);
+        expect(viewModel.count, 1);
+        expect(viewModel.frontCard?.title, 'Active');
+        expect(viewModel.doneCount, 1);
+        expect(doneId, isNotEmpty);
+      });
+
+      test('selectedGroupName reflects ignored archive', () async {
+        await viewModel.addCard(title: 'Skip me', tag: 'dev');
+        await viewModel.ignoreCardAt(0);
+        await viewModel.openArchive(TaskStatus.ignored);
+        expect(viewModel.selectedGroupName, 'IGNORED');
+        expect(viewModel.archivedCards.length, 1);
+      });
+
+      test('loadCards loads only doing cards for the group', () async {
+        await viewModel.addCard(title: 'Stays', tag: 'dev');
+        await viewModel.addCard(title: 'Completes', tag: 'dev');
+        await viewModel.markCardAsDone(0);
+        await viewModel.loadCards();
+        expect(viewModel.count, 1);
+        expect(viewModel.frontCard?.title, 'Stays');
       });
     });
   });

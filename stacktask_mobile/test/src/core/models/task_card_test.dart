@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stacktask_mobile/src/core/models/task_card.dart';
 import 'package:stacktask_mobile/src/core/models/task_group.dart';
+import 'package:stacktask_mobile/src/core/models/task_status.dart';
 
 void main() {
   group('TaskCard', () {
@@ -35,7 +36,7 @@ void main() {
       expect(minimal.description, '');
       expect(minimal.timeEstimate, isNull);
       expect(minimal.priority, 1);
-      expect(minimal.isDone, isFalse);
+      expect(minimal.status, TaskStatus.doing);
     });
 
     test('copyWith returns new instance with updated fields', () {
@@ -63,37 +64,49 @@ void main() {
       expect(restored.description, card.description);
       expect(restored.timeEstimate, card.timeEstimate);
       expect(restored.priority, card.priority);
-      expect(restored.isDone, card.isDone);
+      expect(restored.status, card.status);
     });
 
-    test('copyWith can flip isDone', () {
-      final done = card.copyWith(isDone: true);
-      expect(done.isDone, isTrue);
-      expect(card.isDone, isFalse);
+    test('copyWith can change status', () {
+      final done = card.copyWith(status: TaskStatus.done);
+      expect(done.status, TaskStatus.done);
+      expect(card.status, TaskStatus.doing);
     });
 
-    test('toMap serializes isDone as 1 or 0', () {
-      expect(card.toMap()['is_done'], 0);
-      expect(card.copyWith(isDone: true).toMap()['is_done'], 1);
+    test('toMap serializes status name', () {
+      expect(card.toMap()['status'], 'doing');
+      expect(
+        card.copyWith(status: TaskStatus.done).toMap()['status'],
+        'done',
+      );
+      expect(
+        card.copyWith(status: TaskStatus.ignored).toMap()['status'],
+        'ignored',
+      );
     });
 
-    test('fromMap reads is_done from int', () {
-      final fromTrue = TaskCard.fromMap({
+    test('fromMap reads status name', () {
+      final fromDone = TaskCard.fromMap({
         ...card.toMap(),
-        'is_done': 1,
+        'status': 'done',
       });
-      expect(fromTrue.isDone, isTrue);
-      final fromFalse = TaskCard.fromMap({
+      expect(fromDone.status, TaskStatus.done);
+      final fromIgnored = TaskCard.fromMap({
         ...card.toMap(),
-        'is_done': 0,
+        'status': 'ignored',
       });
-      expect(fromFalse.isDone, isFalse);
+      expect(fromIgnored.status, TaskStatus.ignored);
     });
 
-    test('fromMap defaults isDone to false when column missing', () {
-      final map = card.toMap()..remove('is_done');
+    test('fromMap defaults status to doing when column missing', () {
+      final map = card.toMap()..remove('status');
       final restored = TaskCard.fromMap(map);
-      expect(restored.isDone, isFalse);
+      expect(restored.status, TaskStatus.doing);
+    });
+
+    test('fromMap defaults status to doing for unknown value', () {
+      final restored = TaskCard.fromMap({...card.toMap(), 'status': 'weird'});
+      expect(restored.status, TaskStatus.doing);
     });
 
     test('equality works for identical cards', () {
@@ -182,6 +195,11 @@ void main() {
 
     test('equality includes groupId', () {
       final other = card.copyWith(groupId: 'different');
+      expect(card, isNot(equals(other)));
+    });
+
+    test('equality includes status', () {
+      final other = card.copyWith(status: TaskStatus.done);
       expect(card, isNot(equals(other)));
     });
   });

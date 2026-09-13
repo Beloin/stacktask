@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:stacktask_mobile/src/core/models/task_card.dart';
 import 'package:stacktask_mobile/src/core/models/task_group.dart';
+import 'package:stacktask_mobile/src/core/models/task_status.dart';
 import 'package:stacktask_mobile/src/core/repositories/group_repository.dart';
 import 'package:stacktask_mobile/src/core/repositories/stack_repository.dart';
 import 'package:stacktask_mobile/src/core/result/result_barrel.dart';
@@ -11,9 +14,10 @@ import 'package:stacktask_mobile/src/core/services/task_group_service.dart';
 import 'package:stacktask_mobile/src/core/state/main_state.dart';
 import 'package:stacktask_mobile/src/core/state/state_service.dart';
 
-enum SwipeDirection { left, right, down }
-
 class StackViewModel extends ChangeNotifier {
+  static const Duration searchDebounce = Duration(milliseconds: 200);
+  static const int archiveLimit = 8;
+
   final StackService _service;
   final StackRepository _repository;
   final TaskGroupService _groupService;
@@ -27,6 +31,12 @@ class StackViewModel extends ChangeNotifier {
 
   String? _selectedGroupId;
   Map<String, int> _groupTaskCounts = const {};
+
+  bool _isArchiveMode = false;
+  TaskStatus? _archiveStatus;
+  List<TaskCard> _archivedCards = const [];
+  Map<TaskStatus, int> _statusCounts = const {};
+  Timer? _searchDebounce;
 
   StackViewModel({
     required StackRepository repository,
@@ -58,7 +68,21 @@ class StackViewModel extends ChangeNotifier {
   Map<String, int> get groupTaskCounts => _groupTaskCounts;
   String? get selectedGroupId => _selectedGroupId;
 
+  bool get isArchiveMode => _isArchiveMode;
+  TaskStatus? get archiveStatus => _archiveStatus;
+  List<TaskCard> get archivedCards => _archivedCards;
+  Map<TaskStatus, int> get statusCounts => _statusCounts;
+  int get doneCount => _statusCounts[TaskStatus.done] ?? 0;
+  int get ignoredCount => _statusCounts[TaskStatus.ignored] ?? 0;
+
   String get selectedGroupName {
+    if (_isArchiveMode) {
+      return switch (_archiveStatus) {
+        TaskStatus.done => 'DONE',
+        TaskStatus.ignored => 'IGNORED',
+        _ => '',
+      };
+    }
     final id = _selectedGroupId;
     if (id == null) return '';
     return _groupService.byId(id)?.name ?? '';
@@ -105,9 +129,17 @@ class StackViewModel extends ChangeNotifier {
     if (result case Success(:final value)) {
       _groupTaskCounts = value;
     }
+    final statusResult = await _repository.countByStatus();
+    if (statusResult case Success(:final value)) {
+      _statusCounts = value;
+    }
   }
 
   Future<void> loadCards() async {
+    if (_isArchiveMode) {
+      await _loadArchiveCards();
+      return;
+    }
     final groupId = _selectedGroupId;
     if (groupId == null) {
       _service.clear();
@@ -134,17 +166,93 @@ class StackViewModel extends ChangeNotifier {
     }
   }
 
+  Future<void> _loadArchiveCards() async {
+    final status = _archiveStatus;
+    if (status == null) return;
+    _isLoading = true;
+    _lastError = null;
+    notifyListeners();
+
+    final result = await _repository.searchArchivedCards(
+      status: status,
+      limit: archiveLimit,
+    );
+    switch (result) {
+      case Success(:final value):
+        _archivedCards = value;
+        _isLoading = false;
+        notifyListeners();
+      case Failure(:final error):
+        _lastError = error;
+        _isLoading = false;
+        notifyListeners();
+    }
+  }
+
   Future<void> bootstrap() async {
     await loadGroups();
     await loadCards();
   }
 
   Future<void> selectGroup(String groupId) async {
-    if (_selectedGroupId == groupId) return;
+    _isArchiveMode = false;
+    _archiveStatus = null;
+    _archivedCards = const [];
+    _searchDebounce?.cancel();
+    if (_selectedGroupId == groupId) {
+      notifyListeners();
+      return;
+    }
     _selectedGroupId = groupId;
     await _persistSelectedGroup();
     notifyListeners();
     await loadCards();
+  }
+
+  Future<void> openArchive(TaskStatus status) async {
+    _isArchiveMode = true;
+    _archiveStatus = status;
+    _searchDebounce?.cancel();
+    notifyListeners();
+    await _loadArchiveCards();
+  }
+
+  Future<void> closeArchive() async {
+    _isArchiveMode = false;
+    _archiveStatus = null;
+    _archivedCards = const [];
+    _searchDebounce?.cancel();
+    notifyListeners();
+    await loadCards();
+  }
+
+  Future<void> updateArchiveSearch(String query) async {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(searchDebounce, () => _searchArchive(query));
+  }
+
+  Future<void> _searchArchive(String query) async {
+    final status = _archiveStatus;
+    if (status == null) return;
+    final result = await _repository.searchArchivedCards(
+      status: status,
+      query: query,
+      limit: archiveLimit,
+    );
+    switch (result) {
+      case Success(:final value):
+        _archivedCards = value;
+        notifyListeners();
+      case Failure(:final error):
+        _lastError = error;
+        notifyListeners();
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    super.dispose();
   }
 
   Future<void> addGroup(String name) async {
@@ -153,6 +261,9 @@ class StackViewModel extends ChangeNotifier {
       case Success(:final value):
         _groupService.add(value);
         _selectedGroupId = value.id;
+        _isArchiveMode = false;
+        _archiveStatus = null;
+        _archivedCards = const [];
         await _persistSelectedGroup();
         await _refreshGroupCounts();
         notifyListeners();
@@ -240,13 +351,17 @@ class StackViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> dismissCard(SwipeDirection direction) async {
-    final card = _service.pop();
+  Future<void> _setStatusAndRemoveAt(
+    int index,
+    TaskStatus status,
+  ) async {
+    final card = _service.cardAt(index);
     if (card == null) return;
+    _service.removeAt(index);
     notifyListeners();
 
-    final deleteResult = await _repository.deleteCard(card.id);
-    switch (deleteResult) {
+    final result = await _repository.updateCardStatus(card.id, status);
+    switch (result) {
       case Success():
         final syncResult = await _repository.syncPositions(_service.all);
         if (syncResult case Failure(:final error)) {
@@ -364,29 +479,11 @@ class StackViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> markCardAsDone(int index) async {
-    if (index < 0 || index >= _service.count) return;
-    final card = _service.cardAt(index);
-    if (card == null) return;
-    final updated = card.copyWith(isDone: true);
-    final result = await _repository.updateCard(updated);
-    switch (result) {
-      case Success():
-        _service.removeAt(index);
-        notifyListeners();
-        final syncResult = await _repository.syncPositions(_service.all);
-        if (syncResult case Failure(:final error)) {
-          _lastError = error;
-          notifyListeners();
-        } else {
-          await _refreshGroupCounts();
-          notifyListeners();
-        }
-      case Failure(:final error):
-        _lastError = error;
-        notifyListeners();
-    }
-  }
+  Future<void> markCardAsDone(int index) =>
+      _setStatusAndRemoveAt(index, TaskStatus.done);
+
+  Future<void> ignoreCardAt(int index) =>
+      _setStatusAndRemoveAt(index, TaskStatus.ignored);
 
   Future<void> cycleFrontToEnd() async {
     _service.cycleFrontToEnd();

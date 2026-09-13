@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import 'package:stacktask_mobile/src/core/database/change_log.dart';
 import 'package:stacktask_mobile/src/core/database/database_helper.dart';
 import 'package:stacktask_mobile/src/core/models/task_card.dart';
+import 'package:stacktask_mobile/src/core/models/task_status.dart';
 import 'package:stacktask_mobile/src/core/result/result_barrel.dart';
 
 class StackRepository {
@@ -26,13 +27,78 @@ class StackRepository {
     try {
       final maps = await _db.query(
         DatabaseHelper.tasksTable,
-        where: 'group_id = ?',
-        whereArgs: [groupId],
+        where: 'group_id = ? AND status = ?',
+        whereArgs: [groupId, TaskStatus.doing.name],
         orderBy: 'position ASC',
       );
       return Success(maps.map((m) => TaskCard.fromMap(m)).toList());
     } catch (e) {
       return Failure(ErrorCode.fromString(message: 'Failed to load cards: $e'));
+    }
+  }
+
+  AsyncResult<void, ErrorCode> updateCardStatus(
+    String cardId,
+    TaskStatus status,
+  ) async {
+    try {
+      await _db.update(
+        DatabaseHelper.tasksTable,
+        {'status': status.name},
+        where: 'id = ?',
+        whereArgs: [cardId],
+      );
+      await _logChange(
+        changeType: ChangeType.update,
+        taskId: cardId,
+        payload: {'status': status.name},
+      );
+      return const Success(null);
+    } catch (e) {
+      return Failure(
+        ErrorCode.fromString(message: 'Failed to update card status: $e'),
+      );
+    }
+  }
+
+  AsyncResult<List<TaskCard>, ErrorCode> searchArchivedCards({
+    required TaskStatus status,
+    String query = '',
+    int limit = 8,
+  }) async {
+    try {
+      final pattern = '%${query.trim()}%';
+      final maps = await _db.query(
+        DatabaseHelper.tasksTable,
+        where: 'status = ? AND (title LIKE ? OR description LIKE ?)',
+        whereArgs: [status.name, pattern, pattern],
+        orderBy: 'created_at DESC',
+        limit: limit,
+      );
+      return Success(maps.map((m) => TaskCard.fromMap(m)).toList());
+    } catch (e) {
+      return Failure(
+        ErrorCode.fromString(message: 'Failed to search archived cards: $e'),
+      );
+    }
+  }
+
+  AsyncResult<Map<TaskStatus, int>, ErrorCode> countByStatus() async {
+    try {
+      final rows = await _db.rawQuery(
+        'SELECT status, COUNT(*) AS c FROM ${DatabaseHelper.tasksTable} '
+        'GROUP BY status',
+      );
+      final counts = <TaskStatus, int>{};
+      for (final row in rows) {
+        final status = TaskStatus.fromName(row['status'] as String?);
+        counts[status] = (row['c'] as int?) ?? 0;
+      }
+      return Success(counts);
+    } catch (e) {
+      return Failure(
+        ErrorCode.fromString(message: 'Failed to count cards by status: $e'),
+      );
     }
   }
 

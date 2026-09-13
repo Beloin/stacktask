@@ -3,6 +3,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:stacktask_mobile/src/core/database/database_helper.dart';
 import 'package:stacktask_mobile/src/core/models/task_card.dart';
 import 'package:stacktask_mobile/src/core/models/task_group.dart';
+import 'package:stacktask_mobile/src/core/models/task_status.dart';
 import 'package:stacktask_mobile/src/core/repositories/group_repository.dart';
 import 'package:stacktask_mobile/src/core/repositories/stack_repository.dart';
 import 'package:stacktask_mobile/src/core/result/result_barrel.dart';
@@ -30,7 +31,7 @@ Future<Database> _createTestDatabase() async {
       tag TEXT NOT NULL,
       time_estimate TEXT,
       priority INTEGER NOT NULL DEFAULT 1,
-      is_done INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'doing',
       position INTEGER NOT NULL,
       group_id TEXT NOT NULL,
       created_at TEXT NOT NULL
@@ -206,6 +207,40 @@ void main() {
           expect(counts[TaskGroup.defaultId], 1);
           expect(counts[workId], 1);
         },
+        failure: (error) => fail('Should not fail: $error'),
+      );
+    });
+
+    test('taskCountByGroup counts only doing cards', () async {
+      final stackRepository = StackRepository(database: db);
+      final doing = TaskCard(
+        id: 'dc-1',
+        title: 'Active',
+        tag: 'dev',
+        createdAt: DateTime(2025, 6, 15),
+      );
+      final done = TaskCard(
+        id: 'dc-2',
+        title: 'Finished',
+        tag: 'dev',
+        createdAt: DateTime(2025, 6, 15),
+      );
+      final ignored = TaskCard(
+        id: 'dc-3',
+        title: 'Ignored',
+        tag: 'dev',
+        createdAt: DateTime(2025, 6, 15),
+      );
+      await stackRepository.saveCard(doing, 0);
+      await stackRepository.saveCard(done, 1);
+      await stackRepository.saveCard(ignored, 2);
+      await stackRepository.updateCardStatus('dc-2', TaskStatus.done);
+      await stackRepository.updateCardStatus('dc-3', TaskStatus.ignored);
+
+      final result = await repository.taskCountByGroup();
+      expect(result, isA<Success>());
+      result.when(
+        success: (counts) => expect(counts[TaskGroup.defaultId], 1),
         failure: (error) => fail('Should not fail: $error'),
       );
     });

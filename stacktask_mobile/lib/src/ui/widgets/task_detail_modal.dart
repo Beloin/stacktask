@@ -6,18 +6,18 @@ import 'package:stacktask_mobile/src/ui/widgets/tag_pill_widget.dart';
 
 class TaskDetailModal extends StatelessWidget {
   final TaskCard card;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
-  final VoidCallback onDismiss;
-  final VoidCallback onMove;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
+  final VoidCallback? onDismiss;
+  final VoidCallback? onMove;
 
   const TaskDetailModal({
     super.key,
     required this.card,
-    required this.onEdit,
-    required this.onDelete,
-    required this.onDismiss,
-    required this.onMove,
+    this.onEdit,
+    this.onDelete,
+    this.onDismiss,
+    this.onMove,
   });
 
   @override
@@ -112,72 +112,75 @@ class TaskDetailModal extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
             child: Row(
               children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: onDelete,
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      side: BorderSide(
-                        color: AppColors.danger.withValues(alpha: 0.7),
+                if (onDelete != null)
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: onDelete,
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        side: BorderSide(
+                          color: AppColors.danger.withValues(alpha: 0.7),
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
                       ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    child: const Text(
-                      'Delete',
-                      style: TextStyle(
-                        color: AppColors.danger,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: onMove,
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      side: BorderSide(
-                        color: AppColors.accentLight.withValues(alpha: 0.7),
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    child: const Text(
-                      'Move',
-                      style: TextStyle(
-                        color: AppColors.accentLight,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
+                      child: const Text(
+                        'Delete',
+                        style: TextStyle(
+                          color: AppColors.danger,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: onEdit,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                if (onDelete != null) const SizedBox(width: 12),
+                if (onMove != null)
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: onMove,
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        side: BorderSide(
+                          color: AppColors.accentLight.withValues(alpha: 0.7),
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
                       ),
-                      backgroundColor: AppColors.accent,
-                    ),
-                    child: const Text(
-                      'Edit',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
+                      child: const Text(
+                        'Move',
+                        style: TextStyle(
+                          color: AppColors.accentLight,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ),
-                ),
+                if (onMove != null) const SizedBox(width: 12),
+                if (onEdit != null)
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: onEdit,
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        backgroundColor: AppColors.accent,
+                      ),
+                      child: const Text(
+                        'Edit',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

@@ -1,4 +1,5 @@
 import 'package:stacktask_mobile/src/core/models/task_group.dart';
+import 'package:stacktask_mobile/src/core/models/task_status.dart';
 
 class TaskCard {
   const TaskCard({
@@ -8,7 +9,7 @@ class TaskCard {
     this.description = '',
     this.timeEstimate,
     this.priority = 1,
-    this.isDone = false,
+    this.status = TaskStatus.doing,
     required this.createdAt,
     this.groupId = TaskGroup.defaultId,
   });
@@ -19,7 +20,7 @@ class TaskCard {
   final String description;
   final String? timeEstimate;
   final int priority;
-  final bool isDone;
+  final TaskStatus status;
   final DateTime createdAt;
   final String groupId;
 
@@ -30,7 +31,7 @@ class TaskCard {
     String? description,
     String? timeEstimate,
     int? priority,
-    bool? isDone,
+    TaskStatus? status,
     DateTime? createdAt,
     String? groupId,
   }) {
@@ -41,7 +42,7 @@ class TaskCard {
       description: description ?? this.description,
       timeEstimate: timeEstimate ?? this.timeEstimate,
       priority: priority ?? this.priority,
-      isDone: isDone ?? this.isDone,
+      status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
       groupId: groupId ?? this.groupId,
     );
@@ -55,7 +56,7 @@ class TaskCard {
       'tag': tag,
       'time_estimate': timeEstimate,
       'priority': priority,
-      'is_done': isDone ? 1 : 0,
+      'status': status.name,
       'group_id': groupId,
       'created_at': createdAt.toIso8601String(),
     };
@@ -69,7 +70,7 @@ class TaskCard {
       description: (map['description'] as String?) ?? '',
       timeEstimate: map['time_estimate'] as String?,
       priority: (map['priority'] as int?) ?? 1,
-      isDone: ((map['is_done'] as int?) ?? 0) == 1,
+      status: TaskStatus.fromName(map['status'] as String?),
       createdAt: DateTime.parse(map['created_at'] as String),
       groupId: (map['group_id'] as String?) ?? TaskGroup.defaultId,
     );
@@ -85,7 +86,7 @@ class TaskCard {
           description == other.description &&
           timeEstimate == other.timeEstimate &&
           priority == other.priority &&
-          isDone == other.isDone &&
+          status == other.status &&
           groupId == other.groupId;
 
   @override
@@ -96,11 +97,11 @@ class TaskCard {
         description,
         timeEstimate,
         priority,
-        isDone,
+        status,
         groupId,
       );
 
   @override
   String toString() =>
-      'TaskCard(id: $id, title: $title, tag: $tag, isDone: $isDone, groupId: $groupId)';
+      'TaskCard(id: $id, title: $title, tag: $tag, status: ${status.name}, groupId: $groupId)';
 }

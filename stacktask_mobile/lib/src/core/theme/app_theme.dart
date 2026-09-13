@@ -18,6 +18,16 @@ class AppColors {
   static const modalBackground = Color(0xFF1A1A2E);
   static const inputBorder = Color(0x1AFFFFFF);
   static const inputFill = Color(0x0FFFFFFF);
+  static const doneGreen = Color(0xFF1E5B3A);
+  static const doneGreenLight = Color(0xFF2E7D4F);
+  static const doneBackground1 = Color(0xFF0C2018);
+  static const doneBackground2 = Color(0xFF123528);
+  static const doneBackground3 = Color(0xFF0E2A1F);
+  static const ignoredRed = Color(0xFF7A2230);
+  static const ignoredRedLight = Color(0xFF99303F);
+  static const ignoredBackground1 = Color(0xFF29100F);
+  static const ignoredBackground2 = Color(0xFF3B1A22);
+  static const ignoredBackground3 = Color(0xFF2E141B);
 }
 
 class AppTheme {

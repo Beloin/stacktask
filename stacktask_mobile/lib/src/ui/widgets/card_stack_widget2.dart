@@ -13,6 +13,9 @@ class CardStackWidget2 extends StatefulWidget {
   final VoidCallback? onSwipeRight;
   final VoidCallback? onFrontSwipeDown;
   final void Function(int fromIndex, int toIndex)? onMoveCard;
+  final bool readOnly;
+  final bool inverted;
+  final bool showDescriptionOnFirstCard;
 
   const CardStackWidget2({
     super.key,
@@ -22,6 +25,9 @@ class CardStackWidget2 extends StatefulWidget {
     this.onSwipeRight,
     this.onFrontSwipeDown,
     this.onMoveCard,
+    this.readOnly = false,
+    this.inverted = false,
+    this.showDescriptionOnFirstCard = true,
   });
 
   @override
@@ -34,6 +40,7 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
   static const double _swipeAffordanceReach = 120.0;
   static const double _defaultCardHeight = 320.0;
   static const double _liftFraction = 0.15;
+  static const double _invertedTopPadding = 30.0;
 
   late final CardStackController _controller;
 
@@ -45,6 +52,18 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
   void initState() {
     super.initState();
     _controller = CardStackController(
+      onCardTap: widget.onCardTap,
+      onSwipeLeft: widget.onSwipeLeft,
+      onSwipeRight: widget.onSwipeRight,
+      onFrontSwipeDown: widget.onFrontSwipeDown,
+      onMoveCard: widget.onMoveCard,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant CardStackWidget2 oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _controller.updateCallbacks(
       onCardTap: widget.onCardTap,
       onSwipeLeft: widget.onSwipeLeft,
       onSwipeRight: widget.onSwipeRight,
@@ -80,12 +99,15 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
               ),
             ),
             Positioned(
-              top: constraints.maxHeight / 6,
+              top: widget.inverted
+                  ? _invertedTopPadding - 12
+                  : constraints.maxHeight / 6,
               bottom: constraints.maxHeight / 6,
               right: 0,
               width: 40,
               child: CardScrollPicker(
                 cardCount: widget.cards.length,
+                inverted: widget.inverted,
                 onIndexChanged: (index) {
                   if (index == null) {
                     _controller.clearDetailedView();
@@ -125,7 +147,9 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
           AnimatedPositioned(
             duration: const Duration(milliseconds: 240),
             curve: Curves.easeOutCubic,
-            top: frontCardTop - i * _cardSpacing,
+            top: widget.inverted
+                ? _invertedTopPadding + i * _cardSpacing
+                : frontCardTop - i * _cardSpacing,
             left: cardLeft,
             child: SizedBox(
               width: cardWidth,
@@ -155,8 +179,10 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
       builder: (context, _) {
         final isDetailed = _controller.isDetailedView(index);
         final isExpanded = isFront || isDetailed;
-        final liftY =
-            isDetailed && !isFront ? _screenHeight * _liftFraction : 0.0;
+        final liftMagnitude = _screenHeight * _liftFraction;
+        final liftY = isDetailed && !isFront
+            ? (widget.inverted ? -liftMagnitude : liftMagnitude)
+            : 0.0;
         final isSelected = _controller.isSelected(index);
         final isBypassed = _controller.isBypassed(index);
         final selectedHasOffset =
@@ -171,32 +197,32 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => _controller.tapCard(index),
-          onHorizontalDragStart: isFront && !isDetailed
+          onHorizontalDragStart: isFront && !isDetailed && !widget.readOnly
               ? (_) => _controller.onFrontDragStart()
               : null,
-          onHorizontalDragUpdate: isFront && !isDetailed
+          onHorizontalDragUpdate: isFront && !isDetailed && !widget.readOnly
               ? (d) => _controller.onFrontDragUpdate(d.delta)
               : null,
-          onHorizontalDragEnd: isFront && !isDetailed
+          onHorizontalDragEnd: isFront && !isDetailed && !widget.readOnly
               ? (d) => _handleFrontDragEnd(d)
               : null,
-          onVerticalDragStart: isFront && !isDetailed
+          onVerticalDragStart: isFront && !isDetailed && !widget.readOnly
               ? (_) => _controller.onFrontDragStart()
               : null,
-          onVerticalDragUpdate: isFront && !isDetailed
+          onVerticalDragUpdate: isFront && !isDetailed && !widget.readOnly
               ? (d) => _controller.onFrontDragUpdate(d.delta)
               : null,
-          onVerticalDragEnd: isFront && !isDetailed
+          onVerticalDragEnd: isFront && !isDetailed && !widget.readOnly
               ? (d) => _handleFrontDragEnd(d)
               : null,
-          onLongPressStart: isDetailed
+          onLongPressStart: isDetailed || widget.readOnly
               ? null
               : (_) => _controller.select(index),
-          onLongPressMoveUpdate: isDetailed
+          onLongPressMoveUpdate: isDetailed || widget.readOnly
               ? null
               : (d) => _controller.onSelectedDragUpdate(d.offsetFromOrigin),
           onLongPressEnd:
-              isDetailed ? null : (_) => _controller.onSelectedDragEnd(),
+              isDetailed || widget.readOnly ? null : (_) => _controller.onSelectedDragEnd(),
           child: SizedBox(
             width: areaWidth,
             child: Stack(
@@ -233,8 +259,13 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
                         duration: const Duration(milliseconds: 200),
                         opacity: opacity,
                         child: isFront
-                            ? _buildSwipeableFront(card, isSelected,
-                                selectedHasOffset, isDetailed)
+                            ? _buildSwipeableFront(
+                                card,
+                                isSelected,
+                                selectedHasOffset,
+                                isDetailed,
+                                widget.showDescriptionOnFirstCard,
+                              )
                             : _buildCardShell(
                                 card,
                                 showSelectionBorder: selectedHasOffset,
@@ -264,6 +295,7 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
     bool isSelected,
     bool selectedHasOffset,
     bool isDetailed,
+    bool showDescription,
   ) {
     final target = _controller.isSwipingOut
         ? _controller.swipeOutTarget
@@ -291,6 +323,7 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
         detailedOutline: isDetailed,
         key: _frontMeasureKey,
         expanded: true,
+        showDescription: showDescription,
       ),
     );
   }
@@ -307,9 +340,11 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
     final distance = dragX.abs();
     final progress = (distance / _swipeAffordanceReach).clamp(0.0, 1.0);
     final color = isLeft ? AppColors.danger : AppColors.success;
-    final label = isLeft ? 'Delete' : 'Done';
+    final label = isLeft ? 'Ignore' : 'Done';
     final alignment = isLeft ? Alignment.centerLeft : Alignment.centerRight;
-    final iconData = isLeft ? Icons.delete_outline : Icons.check_circle_outline;
+    final iconData = isLeft
+        ? Icons.visibility_off_outlined
+        : Icons.check_circle_outline;
     final iconHorizontalPadding = isLeft ? 32.0 : 0.0;
     final labelHorizontalPadding = isLeft ? 0.0 : 32.0;
 
@@ -407,6 +442,7 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
     bool showSelectionBorder = false,
     bool detailedOutline = false,
     bool expanded = false,
+    bool showDescription = true,
     Key? key,
   }) {
     return Container(
@@ -439,11 +475,19 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
           ),
         ],
       ),
-      child: _buildCardBody(card, expanded: expanded),
+      child: _buildCardBody(
+        card,
+        expanded: expanded,
+        showDescription: showDescription,
+      ),
     );
   }
 
-  Widget _buildCardBody(TaskCard card, {required bool expanded}) {
+  Widget _buildCardBody(
+    TaskCard card, {
+    required bool expanded,
+    bool showDescription = true,
+  }) {
     final tag = TaskTag.fromName(card.tag);
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
@@ -464,7 +508,7 @@ class _CardStackWidget2State extends State<CardStackWidget2> {
             maxLines: expanded ? null : 2,
             overflow: expanded ? TextOverflow.visible : TextOverflow.ellipsis,
           ),
-          if (expanded && card.description.isNotEmpty) ...[
+          if (expanded && showDescription && card.description.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
               card.description,

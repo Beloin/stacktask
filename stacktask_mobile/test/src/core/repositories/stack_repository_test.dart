@@ -4,6 +4,7 @@ import 'package:stacktask_mobile/src/core/database/change_log.dart';
 import 'package:stacktask_mobile/src/core/database/database_helper.dart';
 import 'package:stacktask_mobile/src/core/models/task_card.dart';
 import 'package:stacktask_mobile/src/core/models/task_group.dart';
+import 'package:stacktask_mobile/src/core/models/task_status.dart';
 import 'package:stacktask_mobile/src/core/repositories/stack_repository.dart';
 import 'package:stacktask_mobile/src/core/result/result_barrel.dart';
 import '../../test_helpers.dart';
@@ -30,7 +31,7 @@ Future<Database> _createTestDatabase() async {
       tag TEXT NOT NULL,
       time_estimate TEXT,
       priority INTEGER NOT NULL DEFAULT 1,
-      is_done INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'doing',
       position INTEGER NOT NULL,
       group_id TEXT NOT NULL,
       created_at TEXT NOT NULL
@@ -201,7 +202,7 @@ void main() {
       );
     });
 
-    test('updateCard with is_done=true persists the flag', () async {
+    test('updateCard with status=done persists the flag', () async {
       final card = TaskCard(
         id: 'repo-done',
         title: 'Finish report',
@@ -209,13 +210,182 @@ void main() {
         createdAt: DateTime(2025, 6, 15),
       );
       await repository.saveCard(card, 0);
-      final done = card.copyWith(isDone: true);
+      final done = card.copyWith(status: TaskStatus.done);
       final result = await repository.updateCard(done);
       expect(result, isA<Success>());
 
+      final loadResult = await repository.searchArchivedCards(
+        status: TaskStatus.done,
+      );
+      loadResult.when(
+        success: (cards) {
+          expect(cards.length, 1);
+          expect(cards.first.id, 'repo-done');
+          expect(cards.first.status, TaskStatus.done);
+        },
+        failure: (error) => fail('Should not fail: $error'),
+      );
+    });
+
+    test('loadCards filters by status doing only', () async {
+      final card = TaskCard(
+        id: 'st-1',
+        title: 'Doing task',
+        tag: 'dev',
+        createdAt: DateTime(2025, 6, 15),
+      );
+      await repository.saveCard(card, 0);
+      await repository.updateCardStatus('st-1', TaskStatus.done);
+
       final loadResult = await repository.loadCards(TaskGroup.defaultId);
       loadResult.when(
-        success: (cards) => expect(cards.first.isDone, isTrue),
+        success: (cards) => expect(cards, isEmpty),
+        failure: (error) => fail('Should not fail: $error'),
+      );
+    });
+
+    test('updateCardStatus persists status and logs change', () async {
+      final card = TaskCard(
+        id: 'st-2',
+        title: 'Status change',
+        tag: 'dev',
+        createdAt: DateTime(2025, 6, 15),
+      );
+      await repository.saveCard(card, 0);
+
+      final result = await repository.updateCardStatus('st-2', TaskStatus.ignored);
+      expect(result, isA<Success>());
+
+      final raw = await db.query(
+        DatabaseHelper.tasksTable,
+        where: 'id = ?',
+        whereArgs: ['st-2'],
+      );
+      expect(raw.first['status'], 'ignored');
+
+      final changesResult = await repository.getChangeLogs();
+      changesResult.when(
+        success: (changes) {
+          final statusChange = changes.where(
+            (c) => c.taskId == 'st-2' && c.changeType == ChangeType.update,
+          );
+          expect(statusChange, isNotEmpty);
+        },
+        failure: (error) => fail('Should not fail: $error'),
+      );
+    });
+
+    test('searchArchivedCards returns newest first limited to 8', () async {
+      for (int i = 0; i < 12; i++) {
+        final card = TaskCard(
+          id: 'arch-$i',
+          title: 'Archived $i',
+          tag: 'dev',
+          createdAt: DateTime(2025, 6, 1).add(Duration(days: i)),
+        );
+        await repository.saveCard(card, i);
+        await repository.updateCardStatus('arch-$i', TaskStatus.done);
+      }
+
+      final result = await repository.searchArchivedCards(
+        status: TaskStatus.done,
+      );
+      result.when(
+        success: (cards) {
+          expect(cards.length, 8);
+          expect(cards.first.id, 'arch-11');
+          expect(cards.first.createdAt.isAfter(cards.last.createdAt), isTrue);
+        },
+        failure: (error) => fail('Should not fail: $error'),
+      );
+    });
+
+    test('searchArchivedCards filters by title and description', () async {
+      final a = TaskCard(
+        id: 'q-1',
+        title: 'Alpha report',
+        description: 'about taxes',
+        tag: 'dev',
+        createdAt: DateTime(2025, 6, 1),
+      );
+      final b = TaskCard(
+        id: 'q-2',
+        title: 'Beta summary',
+        description: 'about meetings',
+        tag: 'dev',
+        createdAt: DateTime(2025, 6, 2),
+      );
+      final c = TaskCard(
+        id: 'q-3',
+        title: 'Gamma plan',
+        description: 'about taxes too',
+        tag: 'dev',
+        createdAt: DateTime(2025, 6, 3),
+      );
+      await repository.saveCard(a, 0);
+      await repository.saveCard(b, 1);
+      await repository.saveCard(c, 2);
+      for (final id in ['q-1', 'q-2', 'q-3']) {
+        await repository.updateCardStatus(id, TaskStatus.ignored);
+      }
+
+      final byTitle = await repository.searchArchivedCards(
+        status: TaskStatus.ignored,
+        query: 'Alpha',
+      );
+      byTitle.when(
+        success: (cards) {
+          expect(cards.length, 1);
+          expect(cards.first.id, 'q-1');
+        },
+        failure: (error) => fail('Should not fail: $error'),
+      );
+
+      final byDescription = await repository.searchArchivedCards(
+        status: TaskStatus.ignored,
+        query: 'taxes',
+      );
+      byDescription.when(
+        success: (cards) {
+          expect(cards.length, 2);
+          expect(cards.first.id, 'q-3');
+        },
+        failure: (error) => fail('Should not fail: $error'),
+      );
+    });
+
+    test('countByStatus returns counts per status', () async {
+      final c1 = TaskCard(
+        id: 'cnt-1',
+        title: 'One',
+        tag: 'dev',
+        createdAt: DateTime(2025, 6, 1),
+      );
+      final c2 = TaskCard(
+        id: 'cnt-2',
+        title: 'Two',
+        tag: 'dev',
+        createdAt: DateTime(2025, 6, 2),
+      );
+      final c3 = TaskCard(
+        id: 'cnt-3',
+        title: 'Three',
+        tag: 'dev',
+        createdAt: DateTime(2025, 6, 3),
+      );
+      await repository.saveCard(c1, 0);
+      await repository.saveCard(c2, 1);
+      await repository.saveCard(c3, 2);
+      await repository.updateCardStatus('cnt-1', TaskStatus.done);
+      await repository.updateCardStatus('cnt-2', TaskStatus.ignored);
+
+      final result = await repository.countByStatus();
+      result.when(
+        success: (counts) {
+          expect(counts[TaskStatus.doing], 1);
+          expect(counts[TaskStatus.done], 1);
+          expect(counts[TaskStatus.ignored], 1);
+        },
         failure: (error) => fail('Should not fail: $error'),
       );
     });

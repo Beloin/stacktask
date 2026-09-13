@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:stacktask_mobile/src/core/database/database_helper.dart';
 import 'package:stacktask_mobile/src/core/models/task_card.dart';
-import 'package:stacktask_mobile/src/core/models/task_group.dart';
+import 'package:stacktask_mobile/src/core/models/task_status.dart';
 import 'package:stacktask_mobile/src/core/repositories/group_repository.dart';
 import 'package:stacktask_mobile/src/core/repositories/stack_repository.dart';
 import 'package:stacktask_mobile/src/core/state/main_state.dart';
@@ -11,14 +11,11 @@ import 'package:stacktask_mobile/src/core/theme/app_theme.dart';
 import 'package:stacktask_mobile/src/ui/view_models/stack_view_model.dart';
 import 'package:stacktask_mobile/src/ui/screens/add_task_screen.dart';
 import 'package:stacktask_mobile/src/ui/widgets/card_stack_widget2.dart';
-import 'package:stacktask_mobile/src/ui/widgets/delete_group_confirmation_dialog.dart';
 import 'package:stacktask_mobile/src/ui/widgets/empty_state_widget.dart';
 import 'package:stacktask_mobile/src/ui/widgets/fab_widget.dart';
-import 'package:stacktask_mobile/src/ui/widgets/group_actions_sheet.dart';
 import 'package:stacktask_mobile/src/ui/widgets/group_picker_sheet.dart';
-import 'package:stacktask_mobile/src/ui/widgets/group_tab_widget.dart';
+import 'package:stacktask_mobile/src/ui/widgets/groups_drawer.dart';
 import 'package:stacktask_mobile/src/ui/widgets/header_widget.dart';
-import 'package:stacktask_mobile/src/ui/widgets/new_group_sheet.dart';
 import 'package:stacktask_mobile/src/ui/widgets/task_detail_modal.dart';
 
 class StackScreen extends StatelessWidget {
@@ -74,66 +71,98 @@ class _StackScreenBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      drawer: const _GroupsDrawer(),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppColors.background1,
-              AppColors.background2,
-              AppColors.background3,
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: Stack(
-                    children: [
-                      _buildAmbientOrb(
-                        alignment: Alignment.topLeft,
-                        color: AppColors.accent,
-                        size: 200,
-                      ),
-                      _buildAmbientOrb(
-                        alignment: Alignment.bottomRight,
-                        color: AppColors.tagPillPink,
-                        size: 180,
-                      ),
-                      _buildAmbientOrb(
-                        alignment: Alignment.bottomLeft,
-                        color: AppColors.tagPillTeal,
-                        size: 160,
-                      ),
-                    ],
+    return Consumer<StackViewModel>(
+      builder: (context, vm, _) {
+        final isArchive = vm.isArchiveMode;
+        final isDone = vm.archiveStatus == TaskStatus.done;
+        final colors = isArchive
+            ? (isDone
+                ? const [
+                    AppColors.doneBackground1,
+                    AppColors.doneBackground2,
+                    AppColors.doneBackground3,
+                  ]
+                : const [
+                    AppColors.ignoredBackground1,
+                    AppColors.ignoredBackground2,
+                    AppColors.ignoredBackground3,
+                  ])
+            : const [
+                AppColors.background1,
+                AppColors.background2,
+                AppColors.background3,
+              ];
+
+        return Scaffold(
+          resizeToAvoidBottomInset: false,
+          drawer: const GroupsDrawer(),
+          floatingActionButton:
+              isArchive ? const SizedBox.shrink() : const _FabArea(),
+          body: AnimatedContainer(
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOut,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: colors,
+              ),
+            ),
+            child: SafeArea(
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: _buildAmbientOrbs(isArchive: isArchive),
+                    ),
                   ),
-                ),
+                  _CardArea(isArchive: isArchive),
+                  const Align(
+                    alignment: Alignment(-1.0, -0.5),
+                    child: Padding(
+                      padding: EdgeInsets.only(left: 12),
+                      child: _DrawerHandle(),
+                    ),
+                  ),
+                ],
               ),
-              const _CardArea(),
-              const Align(
-                alignment: Alignment(-1.0, -0.5),
-                child: Padding(
-                  padding: EdgeInsets.only(left: 12),
-                  child: _DrawerHandle(),
-                ),
-              ),
-            ],
+            ),
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAmbientOrbs({required bool isArchive}) {
+    return Stack(
+      children: [
+        _buildAmbientOrb(
+          alignment: Alignment.topLeft,
+          color: AppColors.accent,
+          size: 200,
+          opacity: isArchive ? 0.04 : 0.12,
         ),
-      ),
-      floatingActionButton: const _FabArea(),
+        _buildAmbientOrb(
+          alignment: Alignment.bottomRight,
+          color: AppColors.tagPillPink,
+          size: 180,
+          opacity: isArchive ? 0.04 : 0.12,
+        ),
+        _buildAmbientOrb(
+          alignment: Alignment.bottomLeft,
+          color: AppColors.tagPillTeal,
+          size: 160,
+          opacity: isArchive ? 0.04 : 0.12,
+        ),
+      ],
     );
   }
 
   Widget _buildAmbientOrb({
-    required AlignmentGeometry alignment,
+    required Alignment alignment,
     required Color color,
     required double size,
+    required double opacity,
   }) {
     return Align(
       alignment: alignment,
@@ -142,7 +171,7 @@ class _StackScreenBody extends StatelessWidget {
         height: size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: color.withValues(alpha: 0.12),
+          color: color.withValues(alpha: opacity),
         ),
       ),
     );
@@ -150,29 +179,52 @@ class _StackScreenBody extends StatelessWidget {
 }
 
 class _CardArea extends StatelessWidget {
-  const _CardArea();
+  final bool isArchive;
+
+  const _CardArea({required this.isArchive});
 
   @override
   Widget build(BuildContext context) {
     return Consumer<StackViewModel>(
       builder: (context, vm, _) {
+        final cards = isArchive ? vm.archivedCards : vm.cards;
         return Column(
           children: [
             HeaderWidget(
               groupName: vm.selectedGroupName,
-              taskCount: vm.count,
+              taskCount: isArchive
+                  ? (vm.archiveStatus == TaskStatus.done
+                      ? vm.doneCount
+                      : vm.ignoredCount)
+                  : vm.count,
             ),
+            if (isArchive)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+                child: _ArchiveSearchField(
+                  onChanged: vm.updateArchiveSearch,
+                ),
+              ),
             Expanded(
-              child: vm.isEmpty
+              child: cards.isEmpty
                   ? const EmptyStateWidget()
-                  : CardStackWidget2(
-                      cards: vm.cards,
-                      onCardTap: (i) => _openTaskDetailModal(context, vm, i),
-                      onSwipeLeft: () => vm.removeCardAt(0),
-                      onSwipeRight: () => vm.markCardAsDone(0),
-                      onFrontSwipeDown: () => vm.cycleFrontToEnd(),
-                      onMoveCard: (from, to) => vm.moveCardTo(from, to),
-                    ),
+                  : isArchive
+                      ? CardStackWidget2(
+                          cards: cards,
+                          readOnly: true,
+                          inverted: true,
+                          showDescriptionOnFirstCard: false,
+                          onCardTap: (i) =>
+                              _openArchiveDetailModal(context, vm, i),
+                        )
+                      : CardStackWidget2(
+                          cards: cards,
+                          onCardTap: (i) => _openTaskDetailModal(context, vm, i),
+                          onSwipeLeft: () => vm.ignoreCardAt(0),
+                          onSwipeRight: () => vm.markCardAsDone(0),
+                          onFrontSwipeDown: () => vm.cycleFrontToEnd(),
+                          onMoveCard: (from, to) => vm.moveCardTo(from, to),
+                        ),
             ),
           ],
         );
@@ -199,13 +251,92 @@ class _CardArea extends StatelessWidget {
       ),
     );
   }
+
+  void _openArchiveDetailModal(
+    BuildContext context,
+    StackViewModel vm,
+    int index,
+  ) {
+    final card = vm.archivedCards[index];
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (modalContext) => ChangeNotifierProvider.value(
+        value: vm,
+        child: _TaskDetailSheet(
+          card: card,
+          cardIndex: index,
+          readOnly: true,
+        ),
+      ),
+    );
+  }
+}
+
+class _ArchiveSearchField extends StatefulWidget {
+  final ValueChanged<String> onChanged;
+
+  const _ArchiveSearchField({required this.onChanged});
+
+  @override
+  State<_ArchiveSearchField> createState() => _ArchiveSearchFieldState();
+}
+
+class _ArchiveSearchFieldState extends State<_ArchiveSearchField> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: _controller,
+      onChanged: widget.onChanged,
+      style: const TextStyle(
+        color: AppColors.textWhite,
+        fontSize: 15,
+        fontWeight: FontWeight.w500,
+      ),
+      decoration: InputDecoration(
+        hintText: 'Search cards',
+        hintStyle: const TextStyle(
+          color: AppColors.textMuted,
+          fontSize: 15,
+        ),
+        prefixIcon: const Icon(Icons.search, color: AppColors.textMuted),
+        filled: true,
+        fillColor: AppColors.inputFill,
+        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.inputBorder),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+            color: AppColors.accentLight.withValues(alpha: 0.6),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _TaskDetailSheet extends StatelessWidget {
   final TaskCard card;
   final int cardIndex;
+  final bool readOnly;
 
-  const _TaskDetailSheet({required this.card, required this.cardIndex});
+  const _TaskDetailSheet({
+    required this.card,
+    required this.cardIndex,
+    this.readOnly = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -222,26 +353,35 @@ class _TaskDetailSheet extends StatelessWidget {
             return TaskDetailModal(
               card: card,
               onDismiss: () => Navigator.of(context).pop(),
-              onDelete: () {
-                Navigator.of(context).pop();
-                context.read<StackViewModel>().removeCardAt(cardIndex);
-              },
-              onEdit: () {
-                Navigator.of(context).pop();
-                _openEditTaskModal(context, cardIndex);
-              },
-              onMove: () {
-                final vm = context.read<StackViewModel>();
-                GroupPickerSheet.show(
-                  context,
-                  groups: vm.groups,
-                  currentGroupId: card.groupId,
-                  onSelected: (groupId) async {
-                    final moved = await vm.moveCardToGroup(card.id, groupId);
-                    if (moved && context.mounted) Navigator.of(context).pop();
-                  },
-                );
-              },
+              onDelete: readOnly
+                  ? null
+                  : () {
+                      Navigator.of(context).pop();
+                      context.read<StackViewModel>().removeCardAt(cardIndex);
+                    },
+              onEdit: readOnly
+                  ? null
+                  : () {
+                      Navigator.of(context).pop();
+                      _openEditTaskModal(context, cardIndex);
+                    },
+              onMove: readOnly
+                  ? null
+                  : () {
+                      final vm = context.read<StackViewModel>();
+                      GroupPickerSheet.show(
+                        context,
+                        groups: vm.groups,
+                        currentGroupId: card.groupId,
+                        onSelected: (groupId) async {
+                          final moved =
+                              await vm.moveCardToGroup(card.id, groupId);
+                          if (moved && context.mounted) {
+                            Navigator.of(context).pop();
+                          }
+                        },
+                      );
+                    },
             );
           },
         ),
@@ -260,8 +400,8 @@ class _TaskDetailSheet extends StatelessWidget {
           ),
         )
         .whenComplete(() {
-          vm.closeModal();
-        });
+      vm.closeModal();
+    });
   }
 }
 
@@ -289,155 +429,8 @@ class _FabArea extends StatelessWidget {
           ),
         )
         .whenComplete(() {
-          vm.closeModal();
-        });
-  }
-}
-
-class _GroupsDrawer extends StatelessWidget {
-  const _GroupsDrawer();
-
-  @override
-  Widget build(BuildContext context) {
-    return Drawer(
-      backgroundColor: AppColors.background1,
-      child: SafeArea(
-        child: Consumer<StackViewModel>(
-          builder: (context, vm, _) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 32, 24, 16),
-                  child: Text(
-                    'GROUPS',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          letterSpacing: 2.5,
-                        ),
-                  ),
-                ),
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: vm.groups.length,
-                    itemBuilder: (context, i) {
-                      final group = vm.groups[i];
-                      final count = vm.groupTaskCounts[group.id] ?? 0;
-                      return _DrawerGroupRow(
-                        group: group,
-                        taskCount: count,
-                        isActive: group.id == vm.selectedGroupId,
-                        onTap: () {
-                          vm.selectGroup(group.id);
-                          Navigator.of(context).pop();
-                        },
-                        onLongPress: () => _showActions(context, vm, group),
-                      );
-                    },
-                  ),
-                ),
-                const Divider(height: 1, color: Colors.white12),
-                InkWell(
-                  onTap: () => _showNewGroup(context, vm),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 16,
-                    ),
-                    child: Row(
-                      children: const [
-                        Icon(Icons.add, color: AppColors.accentLight),
-                        SizedBox(width: 12),
-                        Text(
-                          'New Group',
-                          style: TextStyle(
-                            color: AppColors.accentLight,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  void _showActions(
-    BuildContext context,
-    StackViewModel vm,
-    TaskGroup group,
-  ) {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: AppColors.modalBackground,
-      builder: (_) => GroupActionsSheet(
-        canDelete: group.id != TaskGroup.defaultId,
-        onRename: (name) => vm.renameGroup(group.id, name),
-        onDelete: () async {
-          final confirmed = await DeleteGroupConfirmationDialog.show(
-            context,
-            groupName: group.name,
-            taskCount: vm.groupTaskCounts[group.id] ?? 0,
-          );
-          if (!confirmed) return;
-          await vm.deleteGroupCascade(group.id);
-          if (context.mounted) Navigator.of(context).pop();
-        },
-      ),
-    );
-  }
-
-  void _showNewGroup(BuildContext context, StackViewModel vm) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.modalBackground,
-      builder: (modalContext) => ChangeNotifierProvider.value(
-        value: vm,
-        child: NewGroupSheet(
-          errorMessage: vm.hasError ? vm.lastError?.message : null,
-          onSubmit: (name) {
-            vm.clearError();
-            vm.addGroup(name);
-            Navigator.of(context).pop();
-          },
-        ),
-      ),
-    );
-  }
-}
-
-class _DrawerGroupRow extends StatelessWidget {
-  final TaskGroup group;
-  final int taskCount;
-  final bool isActive;
-  final VoidCallback onTap;
-  final VoidCallback onLongPress;
-
-  const _DrawerGroupRow({
-    required this.group,
-    required this.taskCount,
-    required this.isActive,
-    required this.onTap,
-    required this.onLongPress,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onLongPress: onLongPress,
-      child: GroupTabWidget(
-        name: group.name,
-        taskCount: taskCount,
-        isActive: isActive,
-        onTap: onTap,
-      ),
-    );
+      vm.closeModal();
+    });
   }
 }
 

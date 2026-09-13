@@ -17,11 +17,25 @@ class CardStackController extends ChangeNotifier {
   static const double swipeOutDistance = 600.0;
   static const Duration swipeOutDuration = Duration(milliseconds: 400);
 
-  final ValueChanged<int>? onCardTap;
-  final VoidCallback? onSwipeLeft;
-  final VoidCallback? onSwipeRight;
-  final VoidCallback? onFrontSwipeDown;
-  final void Function(int from, int to)? onMoveCard;
+  ValueChanged<int>? onCardTap;
+  VoidCallback? onSwipeLeft;
+  VoidCallback? onSwipeRight;
+  VoidCallback? onFrontSwipeDown;
+  void Function(int from, int to)? onMoveCard;
+
+  void updateCallbacks({
+    ValueChanged<int>? onCardTap,
+    VoidCallback? onSwipeLeft,
+    VoidCallback? onSwipeRight,
+    VoidCallback? onFrontSwipeDown,
+    void Function(int from, int to)? onMoveCard,
+  }) {
+    this.onCardTap = onCardTap;
+    this.onSwipeLeft = onSwipeLeft;
+    this.onSwipeRight = onSwipeRight;
+    this.onFrontSwipeDown = onFrontSwipeDown;
+    this.onMoveCard = onMoveCard;
+  }
 
   double _frontDragX = 0;
   double _frontDragY = 0;

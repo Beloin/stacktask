@@ -6,7 +6,7 @@ import 'package:stacktask_mobile/src/core/models/task_group.dart';
 
 class DatabaseHelper {
   static const _dbName = 'stacktasks.db';
-  static const _dbVersion = 3;
+  static const _dbVersion = 4;
 
   static const tasksTable = 'tasks';
   static const changesTable = 'task_changes';
@@ -15,6 +15,7 @@ class DatabaseHelper {
   static const List<Migration> _migrations = [
     V2AddIsDoneToTasks(),
     V3AddTaskGroups(),
+    V4AddStatusToTasks(),
   ];
 
   DatabaseHelper._();
@@ -76,7 +77,7 @@ class DatabaseHelper {
         tag TEXT NOT NULL,
         time_estimate TEXT,
         priority INTEGER NOT NULL DEFAULT 1,
-        is_done INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'doing',
         position INTEGER NOT NULL,
         group_id TEXT NOT NULL,
         created_at TEXT NOT NULL

@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 
 import 'package:stacktask_mobile/src/core/database/database_helper.dart';
 import 'package:stacktask_mobile/src/core/models/task_group.dart';
+import 'package:stacktask_mobile/src/core/models/task_status.dart';
 import 'package:stacktask_mobile/src/core/repositories/stack_repository.dart';
 import 'package:stacktask_mobile/src/core/result/result_barrel.dart';
 
@@ -36,8 +37,10 @@ class GroupRepository {
       final rows = await _db.rawQuery(
         'SELECT g.id AS group_id, COUNT(t.id) AS c '
         'FROM ${DatabaseHelper.groupsTable} g '
-        'LEFT JOIN ${DatabaseHelper.tasksTable} t ON t.group_id = g.id '
+        'LEFT JOIN ${DatabaseHelper.tasksTable} t '
+        'ON t.group_id = g.id AND t.status = ? '
         'GROUP BY g.id',
+        [TaskStatus.doing.name],
       );
       final counts = <String, int>{};
       for (final row in rows) {

@@ -4,11 +4,13 @@ import 'package:stacktask_mobile/src/core/theme/app_theme.dart';
 class CardScrollPicker extends StatefulWidget {
   final int cardCount;
   final ValueChanged<int?> onIndexChanged;
+  final bool inverted;
 
   const CardScrollPicker({
     super.key,
     required this.cardCount,
     required this.onIndexChanged,
+    this.inverted = false,
   });
 
   @override
@@ -26,7 +28,8 @@ class _CardScrollPickerState extends State<CardScrollPicker> {
     if (widget.cardCount <= 1) return 0;
     final boxHeight = trackHeight / widget.cardCount;
     final box = (localY / boxHeight).floor();
-    return (widget.cardCount - 1 - box).clamp(0, widget.cardCount - 1);
+    final rawIndex = widget.inverted ? box : widget.cardCount - 1 - box;
+    return rawIndex.clamp(0, widget.cardCount - 1);
   }
 
   void _emit(double localY, double trackHeight) {
@@ -74,7 +77,9 @@ class _CardScrollPickerState extends State<CardScrollPicker> {
                   top: _active
                       ? (_ballY - _activeSize / 2)
                           .clamp(0.0, trackHeight - _activeSize)
-                      : trackHeight - _restSize - 60,
+                      : widget.inverted
+                          ? 60
+                          : trackHeight - _restSize - 60,
                   right: 0,
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),

@@ -7,6 +7,7 @@ void main() {
     WidgetTester tester, {
     required int cardCount,
     required ValueChanged<int?> onIndexChanged,
+    bool inverted = false,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -17,6 +18,7 @@ void main() {
               height: 300,
               child: CardScrollPicker(
                 cardCount: cardCount,
+                inverted: inverted,
                 onIndexChanged: onIndexChanged,
               ),
             ),
@@ -94,5 +96,57 @@ void main() {
     await pumpPicker(tester, cardCount: 0, onIndexChanged: (_) {});
     expect(find.byType(CardScrollPicker), findsOneWidget);
     expect(find.byType(AnimatedContainer), findsNothing);
+  });
+
+  testWidgets('inverted maps top box to index 0', (tester) async {
+    final emitted = <int?>[];
+    await pumpPicker(
+      tester,
+      cardCount: 3,
+      onIndexChanged: emitted.add,
+      inverted: true,
+    );
+
+    final r = rect(tester);
+    await tester.tapAt(Offset(r.center.dx, r.top + 10));
+    await tester.pump();
+
+    expect(emitted.first, 0);
+  });
+
+  testWidgets('inverted maps bottom box to last index', (tester) async {
+    final emitted = <int?>[];
+    await pumpPicker(
+      tester,
+      cardCount: 3,
+      onIndexChanged: emitted.add,
+      inverted: true,
+    );
+
+    final r = rect(tester);
+    await tester.tapAt(Offset(r.center.dx, r.bottom - 10));
+    await tester.pump();
+
+    expect(emitted.first, 2);
+  });
+
+  testWidgets('inverted emits index on drag move', (tester) async {
+    final emitted = <int?>[];
+    await pumpPicker(
+      tester,
+      cardCount: 4,
+      onIndexChanged: emitted.add,
+      inverted: true,
+    );
+
+    final r = rect(tester);
+    final gesture = await tester.startGesture(Offset(r.center.dx, r.top + 10));
+    await tester.pump();
+    await gesture.moveTo(Offset(r.center.dx, r.bottom - 10));
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+
+    expect(emitted, contains(3));
   });
 }
