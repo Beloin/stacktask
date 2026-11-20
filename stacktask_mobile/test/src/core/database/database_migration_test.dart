@@ -295,4 +295,209 @@ void main() {
       await databaseFactoryFfi.deleteDatabase(path);
     });
   });
+
+  group('DatabaseHelper migration v4 -> v5', () {
+    test('adds notes table and preserves groups and tasks', () async {
+      final path = '${inMemoryDatabasePath}_v4_to_v5';
+      final v4 = await databaseFactoryFfi.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 4,
+          onCreate: (db, _) async {
+            await db.execute('''
+              CREATE TABLE ${DatabaseHelper.groupsTable} (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL
+              )
+            ''');
+            await db.insert(DatabaseHelper.groupsTable, {
+              'id': TaskGroup.defaultId,
+              'name': TaskGroup.defaultName,
+              'created_at': DateTime.now().toIso8601String(),
+            });
+            await db.execute('''
+              CREATE TABLE ${DatabaseHelper.tasksTable} (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                tag TEXT NOT NULL,
+                time_estimate TEXT,
+                priority INTEGER NOT NULL DEFAULT 1,
+                status TEXT NOT NULL DEFAULT 'doing',
+                position INTEGER NOT NULL,
+                group_id TEXT NOT NULL,
+                created_at TEXT NOT NULL
+              )
+            ''');
+            await db.execute('''
+              CREATE TABLE ${DatabaseHelper.changesTable} (
+                id TEXT PRIMARY KEY,
+                task_id TEXT,
+                change_type TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                timestamp TEXT NOT NULL
+              )
+            ''');
+          },
+        ),
+      );
+
+      await v4.insert(DatabaseHelper.groupsTable, {
+        'id': 'g-mig',
+        'name': 'Migration Group',
+        'created_at': DateTime(2025, 1, 1).toIso8601String(),
+      });
+      await v4.insert(DatabaseHelper.tasksTable, {
+        'id': 't-mig',
+        'title': 'Surviving task',
+        'description': '',
+        'tag': 'dev',
+        'time_estimate': null,
+        'priority': 1,
+        'status': 'doing',
+        'position': 0,
+        'group_id': 'g-mig',
+        'created_at': DateTime(2025, 1, 1).toIso8601String(),
+      });
+      await v4.close();
+
+      final helper = DatabaseHelper.instance;
+      final upgraded = await helper.openForTesting(
+        path: path,
+        factory: databaseFactoryFfi,
+      );
+
+      final columns = await upgraded.rawQuery(
+        'PRAGMA table_info(${DatabaseHelper.notesTable})',
+      );
+      final colNames = columns.map((c) => c['name'] as String).toList();
+      expect(colNames, containsAll([
+        'id', 'title', 'description', 'group_id', 'created_at',
+      ]));
+
+      final groups = await upgraded.query(DatabaseHelper.groupsTable);
+      expect(groups.length, 2);
+      expect(groups.any((g) => g['id'] == 'g-mig'), isTrue);
+
+      final tasks = await upgraded.query(DatabaseHelper.tasksTable);
+      expect(tasks.length, 1);
+      expect(tasks.first['id'], 't-mig');
+      expect(tasks.first['title'], 'Surviving task');
+      expect(tasks.first['group_id'], 'g-mig');
+
+      await upgraded.close();
+      await databaseFactoryFfi.deleteDatabase(path);
+    });
+
+    test('reopening a v5 DB keeps the notes table', () async {
+      final path = '${inMemoryDatabasePath}_v5';
+      final helper = DatabaseHelper.instance;
+      final db = await helper.openForTesting(
+        path: path,
+        factory: databaseFactoryFfi,
+      );
+      await db.insert(DatabaseHelper.notesTable, {
+        'id': 'note-1',
+        'title': 'Persisted note',
+        'description': '',
+        'group_id': TaskGroup.defaultId,
+        'created_at': DateTime(2025, 1, 1).toIso8601String(),
+      });
+      await db.close();
+
+      final reopened = await helper.openForTesting(
+        path: path,
+        factory: databaseFactoryFfi,
+      );
+      final columns = await reopened.rawQuery(
+        'PRAGMA table_info(${DatabaseHelper.notesTable})',
+      );
+      final colNames = columns.map((c) => c['name'] as String).toList();
+      expect(colNames, containsAll([
+        'id', 'title', 'description', 'group_id', 'created_at',
+      ]));
+
+      final notes = await reopened.query(DatabaseHelper.notesTable);
+      expect(notes.length, 1);
+      expect(notes.first['title'], 'Persisted note');
+
+      await reopened.close();
+      await databaseFactoryFfi.deleteDatabase(path);
+    });
+  });
+
+  group('DatabaseHelper migration v5 -> v6', () {
+    test('adds position column and backfills by created_at DESC', () async {
+      final path = '${inMemoryDatabasePath}_v5_to_v6';
+      final v5 = await databaseFactoryFfi.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 5,
+          onCreate: (db, _) async {
+            await db.execute('''
+              CREATE TABLE ${DatabaseHelper.groupsTable} (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL
+              )
+            ''');
+            await db.insert(DatabaseHelper.groupsTable, {
+              'id': TaskGroup.defaultId,
+              'name': TaskGroup.defaultName,
+              'created_at': DateTime.now().toIso8601String(),
+            });
+            await db.execute('''
+              CREATE TABLE ${DatabaseHelper.notesTable} (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                group_id TEXT NOT NULL,
+                created_at TEXT NOT NULL
+              )
+            ''');
+          },
+        ),
+      );
+
+      await v5.insert(DatabaseHelper.notesTable, {
+        'id': 'note-old',
+        'title': 'Old note',
+        'description': '',
+        'group_id': TaskGroup.defaultId,
+        'created_at': DateTime(2025, 1, 1).toIso8601String(),
+      });
+      await v5.insert(DatabaseHelper.notesTable, {
+        'id': 'note-new',
+        'title': 'New note',
+        'description': '',
+        'group_id': TaskGroup.defaultId,
+        'created_at': DateTime(2025, 1, 2).toIso8601String(),
+      });
+      await v5.close();
+
+      final helper = DatabaseHelper.instance;
+      final upgraded = await helper.openForTesting(
+        path: path,
+        factory: databaseFactoryFfi,
+      );
+
+      final columns = await upgraded.rawQuery(
+        'PRAGMA table_info(${DatabaseHelper.notesTable})',
+      );
+      final colNames = columns.map((c) => c['name'] as String).toList();
+      expect(colNames, contains('position'));
+
+      final notes = await upgraded.query(
+        DatabaseHelper.notesTable,
+        orderBy: 'position ASC',
+      );
+      expect(notes.length, 2);
+      expect(notes.first['id'], 'note-new');
+      expect(notes.last['id'], 'note-old');
+
+      await upgraded.close();
+      await databaseFactoryFfi.deleteDatabase(path);
+    });
+  });
 }

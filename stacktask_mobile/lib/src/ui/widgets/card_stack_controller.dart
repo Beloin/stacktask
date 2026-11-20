@@ -7,41 +7,37 @@ class CardStackController extends ChangeNotifier {
     this.onCardTap,
     this.onSwipeLeft,
     this.onSwipeRight,
-    this.onFrontSwipeDown,
     this.onMoveCard,
   });
 
   static const double swipeThreshold = 120.0;
-  static const double swipeDownThreshold = 100.0;
   static const double swipeVelocityThreshold = 500.0;
   static const double swipeOutDistance = 600.0;
   static const Duration swipeOutDuration = Duration(milliseconds: 400);
 
   ValueChanged<int>? onCardTap;
-  VoidCallback? onSwipeLeft;
-  VoidCallback? onSwipeRight;
-  VoidCallback? onFrontSwipeDown;
+  ValueChanged<int>? onSwipeLeft;
+  ValueChanged<int>? onSwipeRight;
   void Function(int from, int to)? onMoveCard;
 
   void updateCallbacks({
     ValueChanged<int>? onCardTap,
-    VoidCallback? onSwipeLeft,
-    VoidCallback? onSwipeRight,
-    VoidCallback? onFrontSwipeDown,
+    ValueChanged<int>? onSwipeLeft,
+    ValueChanged<int>? onSwipeRight,
     void Function(int from, int to)? onMoveCard,
   }) {
     this.onCardTap = onCardTap;
     this.onSwipeLeft = onSwipeLeft;
     this.onSwipeRight = onSwipeRight;
-    this.onFrontSwipeDown = onFrontSwipeDown;
     this.onMoveCard = onMoveCard;
   }
 
+  int? _frontIndex;
+  int? get frontIndex => _frontIndex;
+
   double _frontDragX = 0;
-  double _frontDragY = 0;
   double get frontDragX => _frontDragX;
-  double get frontDragY => _frontDragY;
-  Offset get frontOffset => Offset(_frontDragX, _frontDragY);
+  Offset get frontOffset => Offset(_frontDragX, 0);
 
   bool _isSwipingOut = false;
   SwipeOutDirection _swipeOutDirection = SwipeOutDirection.none;
@@ -54,8 +50,6 @@ class CardStackController extends ChangeNotifier {
         return const Offset(-swipeOutDistance, 0);
       case SwipeOutDirection.right:
         return const Offset(swipeOutDistance, 0);
-      case SwipeOutDirection.down:
-        return const Offset(0, swipeOutDistance);
       case SwipeOutDirection.none:
         return Offset.zero;
     }
@@ -85,21 +79,8 @@ class CardStackController extends ChangeNotifier {
   double get selectedDragY => _selectedDragY;
   Offset get selectedOffset => Offset(_selectedDragX, _selectedDragY);
 
-  int? _detailedViewIndex;
-  int? get detailedViewIndex => _detailedViewIndex;
-  bool get hasDetailedView => _detailedViewIndex != null;
-  bool isDetailedView(int index) => _detailedViewIndex == index;
-
-  void setDetailedView(int? index) {
-    if (_detailedViewIndex == index) return;
-    _detailedViewIndex = index;
-    notifyListeners();
-  }
-
-  void clearDetailedView() => setDetailedView(null);
-
   void select(int index) {
-    if (_isSwipingOut || hasDetailedView) return;
+    if (_isSwipingOut) return;
     _selectedIndex = index;
     _bypassedIndex = index;
     _selectedDragX = 0;
@@ -159,18 +140,17 @@ class CardStackController extends ChangeNotifier {
   bool _isFrontDragging = false;
   bool get isFrontDragging => _isFrontDragging;
 
-  void onFrontDragStart() {
-    if (_isSwipingOut || hasDetailedView) return;
+  void onFrontDragStart(int index) {
+    if (_isSwipingOut) return;
+    _frontIndex = index;
     _isFrontDragging = true;
     _frontDragX = 0;
-    _frontDragY = 0;
     notifyListeners();
   }
 
   void onFrontDragUpdate(Offset delta) {
-    if (_isSwipingOut || hasDetailedView) return;
+    if (_isSwipingOut) return;
     _frontDragX += delta.dx;
-    _frontDragY += delta.dy;
     notifyListeners();
   }
 
@@ -181,7 +161,6 @@ class CardStackController extends ChangeNotifier {
     }
 
     final fastHorizontalSwipe = velocity.dx.abs() > swipeVelocityThreshold;
-    final fastVerticalSwipe = velocity.dy > swipeVelocityThreshold;
 
     FrontDragResult result = FrontDragResult.none;
 
@@ -190,14 +169,10 @@ class CardStackController extends ChangeNotifier {
       result = _frontDragX > 0
           ? FrontDragResult.swipeRight
           : FrontDragResult.swipeLeft;
-    } else if (_frontDragY > swipeDownThreshold ||
-        (fastVerticalSwipe && _frontDragY > 40)) {
-      result = FrontDragResult.swipeDown;
     }
 
     _isFrontDragging = false;
     _frontDragX = 0;
-    _frontDragY = 0;
     notifyListeners();
     return result;
   }
@@ -217,16 +192,12 @@ class CardStackController extends ChangeNotifier {
   }
 
   void tapCard(int index) {
-    if (hasDetailedView) {
-      if (index == _detailedViewIndex) onCardTap?.call(index);
-      return;
-    }
     onCardTap?.call(index);
   }
 
   void reset() {
+    _frontIndex = null;
     _frontDragX = 0;
-    _frontDragY = 0;
     _isFrontDragging = false;
     _isSwipingOut = false;
     _swipeOutDirection = SwipeOutDirection.none;
@@ -234,7 +205,6 @@ class CardStackController extends ChangeNotifier {
     _bypassedIndex = null;
     _selectedDragX = 0;
     _selectedDragY = 0;
-    _detailedViewIndex = null;
     notifyListeners();
   }
 }
@@ -243,12 +213,10 @@ enum FrontDragResult {
   none,
   swipeLeft,
   swipeRight,
-  swipeDown,
 }
 
 enum SwipeOutDirection {
   none,
   left,
   right,
-  down,
 }

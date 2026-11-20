@@ -6,16 +6,19 @@ import 'package:stacktask_mobile/src/core/models/task_group.dart';
 
 class DatabaseHelper {
   static const _dbName = 'stacktasks.db';
-  static const _dbVersion = 4;
+  static const _dbVersion = 6;
 
   static const tasksTable = 'tasks';
   static const changesTable = 'task_changes';
   static const groupsTable = 'task_groups';
+  static const notesTable = 'notes';
 
   static const List<Migration> _migrations = [
     V2AddIsDoneToTasks(),
     V3AddTaskGroups(),
     V4AddStatusToTasks(),
+    V5AddNotes(),
+    V6AddNotePosition(),
   ];
 
   DatabaseHelper._();
@@ -91,6 +94,17 @@ class DatabaseHelper {
         change_type TEXT NOT NULL,
         payload TEXT NOT NULL,
         timestamp TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE $notesTable (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        group_id TEXT NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
       )
     ''');
   }

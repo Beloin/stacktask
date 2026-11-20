@@ -39,5 +39,15 @@ Future<Database> createTestDatabase() async {
       timestamp TEXT NOT NULL
     )
   ''');
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS ${DatabaseHelper.notesTable} (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      group_id TEXT NOT NULL,
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    )
+  ''');
   return db;
 }

@@ -5,6 +5,7 @@ import 'package:stacktask_mobile/src/core/database/database_helper.dart';
 import 'package:stacktask_mobile/src/core/models/task_group.dart';
 import 'package:stacktask_mobile/src/core/models/task_status.dart';
 import 'package:stacktask_mobile/src/core/repositories/group_repository.dart';
+import 'package:stacktask_mobile/src/core/repositories/note_repository.dart';
 import 'package:stacktask_mobile/src/core/repositories/stack_repository.dart';
 import 'package:stacktask_mobile/src/core/services/stack_service.dart';
 import 'package:stacktask_mobile/src/core/services/task_group_service.dart';
@@ -50,6 +51,16 @@ Future<Database> _createTestDatabase() async {
       timestamp TEXT NOT NULL
     )
   ''');
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS ${DatabaseHelper.notesTable} (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      group_id TEXT NOT NULL,
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    )
+  ''');
   return db;
 }
 
@@ -77,9 +88,11 @@ void main() {
         database: db,
         stackRepository: repository,
       );
+      final noteRepository = NoteRepository(database: db);
       viewModel = StackViewModel(
         repository: repository,
         groupRepository: groupRepository,
+        noteRepository: noteRepository,
         stateService: stateService,
         service: StackService(),
         groupService: TaskGroupService(),
@@ -119,11 +132,11 @@ void main() {
       expect(viewModel.cards[0].id, isNot(equals(viewModel.cards[1].id)));
     });
 
-    test('cards beyond maxCards discard oldest', () async {
-      for (int i = 0; i < StackService.maxCards + 2; i++) {
+    test('adding many cards keeps all of them', () async {
+      for (int i = 0; i < 20; i++) {
         await viewModel.addCard(title: 'Task $i', tag: 'dev');
       }
-      expect(viewModel.count, StackService.maxCards);
+      expect(viewModel.count, 20);
     });
 
     test('markCardAsDone removes card from active stack and marks it done',
@@ -193,16 +206,6 @@ void main() {
       await viewModel.addCard(title: 'C', tag: 'dev');
       await viewModel.promoteToFront(2);
       expect(viewModel.frontCard?.title, 'A');
-    });
-
-    test('cycleFrontToEnd moves front card to end', () async {
-      await viewModel.addCard(title: 'A', tag: 'dev');
-      await viewModel.addCard(title: 'B', tag: 'dev');
-      await viewModel.addCard(title: 'C', tag: 'dev');
-      final frontTitle = viewModel.frontCard?.title;
-      await viewModel.cycleFrontToEnd();
-      expect(viewModel.cards.last.title, frontTitle);
-      expect(viewModel.count, 3);
     });
 
     test('openModal and closeModal toggle state', () {
@@ -386,6 +389,86 @@ void main() {
       });
     });
 
+    group('notes', () {
+      test('addNote adds a note to the selected group', () async {
+        await viewModel.addNote(title: 'My note', description: 'Details');
+        expect(viewModel.notesCount, 1);
+        expect(viewModel.notes.first.title, 'My note');
+        expect(viewModel.notes.first.description, 'Details');
+        expect(viewModel.notes.first.groupId, TaskGroup.defaultId);
+      });
+
+      test('updateNote updates title and description', () async {
+        await viewModel.addNote(title: 'Old', description: 'old desc');
+        final id = viewModel.notes.first.id;
+        await viewModel.updateNote(
+          id: id,
+          title: 'New',
+          description: 'new desc',
+        );
+        expect(viewModel.notes.first.title, 'New');
+        expect(viewModel.notes.first.description, 'new desc');
+      });
+
+      test('updateNote with unknown id is a no-op', () async {
+        await viewModel.addNote(title: 'Keep');
+        await viewModel.updateNote(id: 'missing', title: 'Changed');
+        expect(viewModel.notes.first.title, 'Keep');
+      });
+
+      test('deleteNote removes the note', () async {
+        await viewModel.addNote(title: 'To delete');
+        final id = viewModel.notes.first.id;
+        await viewModel.deleteNote(id);
+        expect(viewModel.notesIsEmpty, isTrue);
+      });
+
+      test('moveNoteTo reorders notes', () async {
+        await viewModel.addNote(title: 'A');
+        await viewModel.addNote(title: 'B');
+        await viewModel.addNote(title: 'C');
+        expect(viewModel.notes.first.title, 'C');
+        await viewModel.moveNoteTo(0, 2);
+        expect(viewModel.notes.first.title, 'B');
+        expect(viewModel.notes.last.title, 'C');
+      });
+
+      test('loadMoreNotes reveals notes in pages of 10', () async {
+        for (int i = 0; i < 25; i++) {
+          await viewModel.addNote(title: 'Note $i');
+        }
+        expect(viewModel.visibleNotesCount, 10);
+        expect(viewModel.hasMoreNotes, isTrue);
+        viewModel.loadMoreNotes();
+        expect(viewModel.visibleNotesCount, 20);
+        viewModel.loadMoreNotes();
+        expect(viewModel.visibleNotesCount, 30);
+        expect(viewModel.hasMoreNotes, isFalse);
+      });
+
+      test('selectGroup reloads notes for the selected group', () async {
+        await viewModel.addNote(title: 'Default note');
+        await viewModel.addGroup('Work');
+        await viewModel.addNote(title: 'Work note');
+        expect(viewModel.notes.length, 1);
+        expect(viewModel.notes.first.title, 'Work note');
+
+        await viewModel.selectGroup(TaskGroup.defaultId);
+        expect(viewModel.notes.length, 1);
+        expect(viewModel.notes.first.title, 'Default note');
+      });
+
+      test('deleteGroupCascade removes notes for that group', () async {
+        await viewModel.addGroup('Work');
+        final workId = viewModel.selectedGroupId!;
+        await viewModel.addNote(title: 'Work note');
+        expect(viewModel.notesCount, 1);
+
+        await viewModel.deleteGroupCascade(workId);
+        expect(viewModel.notesIsEmpty, isTrue);
+      });
+    });
+
     group('persistence', () {
       test('restores selected group on relaunch via initialSelectedGroupId',
           () async {
@@ -399,9 +482,11 @@ void main() {
           database: db,
           stackRepository: repository2,
         );
+        final noteRepository2 = NoteRepository(database: db);
         final vm2 = StackViewModel(
           repository: repository2,
           groupRepository: groupRepository2,
+          noteRepository: noteRepository2,
           stateService: stateService,
           initialSelectedGroupId: stateService.get<MainState>()?.group,
         );

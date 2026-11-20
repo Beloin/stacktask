@@ -35,12 +35,13 @@ void main() {
         expect(service.all[1], card1);
       });
 
-      test('discards oldest card when exceeding maxCards', () {
-        for (int i = 0; i < StackService.maxCards + 1; i++) {
+      test('keeps all cards when pushing many', () {
+        for (int i = 0; i < 30; i++) {
           service.push(makeCard('card-$i'));
         }
-        expect(service.count, StackService.maxCards);
-        expect(service.all.last.id, 'card-1');
+        expect(service.count, 30);
+        expect(service.all.first.id, 'card-29');
+        expect(service.all.last.id, 'card-0');
       });
     });
 
@@ -100,24 +101,6 @@ void main() {
         service.push(makeCard('1'));
         service.promoteToFront(5);
         expect(service.all[0].id, '1');
-      });
-    });
-
-    group('cycleFrontToEnd', () {
-      test('moves front card to end', () {
-        service.push(makeCard('1'));
-        service.push(makeCard('2'));
-        service.push(makeCard('3'));
-        service.cycleFrontToEnd();
-        expect(service.all[0].id, '2');
-        expect(service.all[1].id, '1');
-        expect(service.all[2].id, '3');
-      });
-
-      test('does nothing with 1 or fewer cards', () {
-        service.push(makeCard('1'));
-        service.cycleFrontToEnd();
-        expect(service.count, 1);
       });
     });
 

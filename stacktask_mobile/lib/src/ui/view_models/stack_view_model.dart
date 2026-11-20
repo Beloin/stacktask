@@ -3,12 +3,15 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:stacktask_mobile/src/core/models/note.dart';
 import 'package:stacktask_mobile/src/core/models/task_card.dart';
 import 'package:stacktask_mobile/src/core/models/task_group.dart';
 import 'package:stacktask_mobile/src/core/models/task_status.dart';
 import 'package:stacktask_mobile/src/core/repositories/group_repository.dart';
+import 'package:stacktask_mobile/src/core/repositories/note_repository.dart';
 import 'package:stacktask_mobile/src/core/repositories/stack_repository.dart';
 import 'package:stacktask_mobile/src/core/result/result_barrel.dart';
+import 'package:stacktask_mobile/src/core/services/note_service.dart';
 import 'package:stacktask_mobile/src/core/services/stack_service.dart';
 import 'package:stacktask_mobile/src/core/services/task_group_service.dart';
 import 'package:stacktask_mobile/src/core/state/main_state.dart';
@@ -17,11 +20,14 @@ import 'package:stacktask_mobile/src/core/state/state_service.dart';
 class StackViewModel extends ChangeNotifier {
   static const Duration searchDebounce = Duration(milliseconds: 200);
   static const int archiveLimit = 8;
+  static const int notePageSize = 10;
 
   final StackService _service;
   final StackRepository _repository;
   final TaskGroupService _groupService;
   final GroupRepository _groupRepository;
+  final NoteService _noteService;
+  final NoteRepository _noteRepository;
   final StateService _stateService;
   final Uuid _uuid;
 
@@ -37,20 +43,25 @@ class StackViewModel extends ChangeNotifier {
   List<TaskCard> _archivedCards = const [];
   Map<TaskStatus, int> _statusCounts = const {};
   Timer? _searchDebounce;
+  int _visibleNotesCount = notePageSize;
 
   StackViewModel({
     required StackRepository repository,
     required GroupRepository groupRepository,
+    required NoteRepository noteRepository,
     required StateService stateService,
     StackService? service,
     TaskGroupService? groupService,
+    NoteService? noteService,
     Uuid? uuid,
     String? initialSelectedGroupId,
   })  : _service = service ?? StackService(),
         _repository = repository,
         _groupRepository = groupRepository,
+        _noteRepository = noteRepository,
         _stateService = stateService,
         _groupService = groupService ?? TaskGroupService(),
+        _noteService = noteService ?? NoteService(),
         _uuid = uuid ?? const Uuid(),
         _selectedGroupId = initialSelectedGroupId;
 
@@ -67,6 +78,12 @@ class StackViewModel extends ChangeNotifier {
   int get groupCount => _groupService.count;
   Map<String, int> get groupTaskCounts => _groupTaskCounts;
   String? get selectedGroupId => _selectedGroupId;
+
+  List<Note> get notes => _noteService.all;
+  int get notesCount => _noteService.count;
+  bool get notesIsEmpty => _noteService.isEmpty;
+  int get visibleNotesCount => _visibleNotesCount;
+  bool get hasMoreNotes => _visibleNotesCount < _noteService.count;
 
   bool get isArchiveMode => _isArchiveMode;
   TaskStatus? get archiveStatus => _archiveStatus;
@@ -93,8 +110,6 @@ class StackViewModel extends ChangeNotifier {
     if (id == null) return null;
     return _groupService.byId(id);
   }
-
-  int get maxCards => StackService.maxCards;
 
   TaskCard? cardAt(int index) => _service.cardAt(index);
 
@@ -189,9 +204,35 @@ class StackViewModel extends ChangeNotifier {
     }
   }
 
+  Future<void> loadNotes() async {
+    final groupId = _selectedGroupId;
+    if (groupId == null) {
+      _noteService.clear();
+      notifyListeners();
+      return;
+    }
+    final result = await _noteRepository.loadNotes(groupId);
+    switch (result) {
+      case Success(:final value):
+        _noteService.replaceAll(value);
+        _visibleNotesCount = notePageSize;
+        notifyListeners();
+      case Failure(:final error):
+        _lastError = error;
+        notifyListeners();
+    }
+  }
+
+  void loadMoreNotes() {
+    if (!hasMoreNotes) return;
+    _visibleNotesCount += notePageSize;
+    notifyListeners();
+  }
+
   Future<void> bootstrap() async {
     await loadGroups();
     await loadCards();
+    await loadNotes();
   }
 
   Future<void> selectGroup(String groupId) async {
@@ -207,6 +248,7 @@ class StackViewModel extends ChangeNotifier {
     await _persistSelectedGroup();
     notifyListeners();
     await loadCards();
+    await loadNotes();
   }
 
   Future<void> openArchive(TaskStatus status) async {
@@ -268,6 +310,7 @@ class StackViewModel extends ChangeNotifier {
         await _refreshGroupCounts();
         notifyListeners();
         await loadCards();
+        await loadNotes();
       case Failure(:final error):
         _lastError = error;
         notifyListeners();
@@ -293,6 +336,7 @@ class StackViewModel extends ChangeNotifier {
       case Success(:final value):
         _groupService.remove(id);
         _groupTaskCounts = {..._groupTaskCounts}..remove(id);
+        await _noteRepository.deleteNotesByGroup(id);
         if (wasSelected) {
           final fallback = _groupService.all.isNotEmpty
               ? _groupService.all.first.id
@@ -304,6 +348,7 @@ class StackViewModel extends ChangeNotifier {
         notifyListeners();
         if (wasSelected) {
           await loadCards();
+          await loadNotes();
         }
         return value;
       case Failure(:final error):
@@ -485,11 +530,65 @@ class StackViewModel extends ChangeNotifier {
   Future<void> ignoreCardAt(int index) =>
       _setStatusAndRemoveAt(index, TaskStatus.ignored);
 
-  Future<void> cycleFrontToEnd() async {
-    _service.cycleFrontToEnd();
+  Future<void> addNote({
+    required String title,
+    String description = '',
+  }) async {
+    final groupId = _selectedGroupId ?? TaskGroup.defaultId;
+    final result = await _noteRepository.addNote(
+      groupId: groupId,
+      title: title,
+      description: description,
+    );
+    switch (result) {
+      case Success(:final value):
+        _noteService.add(value);
+        notifyListeners();
+      case Failure(:final error):
+        _lastError = error;
+        notifyListeners();
+    }
+  }
+
+  Future<void> updateNote({
+    required String id,
+    required String title,
+    String description = '',
+  }) async {
+    final existing = _noteService.byId(id);
+    if (existing == null) return;
+    final updated = existing.copyWith(
+      title: title.trim(),
+      description: description.trim(),
+    );
+    final result = await _noteRepository.updateNote(updated);
+    switch (result) {
+      case Success():
+        _noteService.update(updated);
+        notifyListeners();
+      case Failure(:final error):
+        _lastError = error;
+        notifyListeners();
+    }
+  }
+
+  Future<void> deleteNote(String id) async {
+    final result = await _noteRepository.deleteNote(id);
+    switch (result) {
+      case Success():
+        _noteService.remove(id);
+        notifyListeners();
+      case Failure(:final error):
+        _lastError = error;
+        notifyListeners();
+    }
+  }
+
+  Future<void> moveNoteTo(int from, int to) async {
+    _noteService.moveTo(from, to);
     notifyListeners();
 
-    final result = await _repository.syncPositions(_service.all);
+    final result = await _noteRepository.syncNotePositions(_noteService.all);
     if (result case Failure(:final error)) {
       _lastError = error;
       notifyListeners();

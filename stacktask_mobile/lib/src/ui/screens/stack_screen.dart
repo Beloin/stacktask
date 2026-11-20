@@ -4,6 +4,7 @@ import 'package:stacktask_mobile/src/core/database/database_helper.dart';
 import 'package:stacktask_mobile/src/core/models/task_card.dart';
 import 'package:stacktask_mobile/src/core/models/task_status.dart';
 import 'package:stacktask_mobile/src/core/repositories/group_repository.dart';
+import 'package:stacktask_mobile/src/core/repositories/note_repository.dart';
 import 'package:stacktask_mobile/src/core/repositories/stack_repository.dart';
 import 'package:stacktask_mobile/src/core/state/main_state.dart';
 import 'package:stacktask_mobile/src/core/state/state_service.dart';
@@ -16,6 +17,7 @@ import 'package:stacktask_mobile/src/ui/widgets/fab_widget.dart';
 import 'package:stacktask_mobile/src/ui/widgets/group_picker_sheet.dart';
 import 'package:stacktask_mobile/src/ui/widgets/groups_drawer.dart';
 import 'package:stacktask_mobile/src/ui/widgets/header_widget.dart';
+import 'package:stacktask_mobile/src/ui/widgets/notes_drawer.dart';
 import 'package:stacktask_mobile/src/ui/widgets/task_detail_modal.dart';
 
 class StackScreen extends StatelessWidget {
@@ -54,10 +56,12 @@ class StackScreen extends StatelessWidget {
       database: db,
       stackRepository: stackRepository,
     );
+    final noteRepository = NoteRepository(database: db);
     final initialGroupId = stateService.get<MainState>()?.group;
     final vm = StackViewModel(
       repository: stackRepository,
       groupRepository: groupRepository,
+      noteRepository: noteRepository,
       stateService: stateService,
       initialSelectedGroupId: initialGroupId,
     );
@@ -96,6 +100,7 @@ class _StackScreenBody extends StatelessWidget {
         return Scaffold(
           resizeToAvoidBottomInset: false,
           drawer: const GroupsDrawer(),
+          endDrawer: const NotesDrawer(),
           floatingActionButton:
               isArchive ? const SizedBox.shrink() : const _FabArea(),
           body: AnimatedContainer(
@@ -212,16 +217,14 @@ class _CardArea extends StatelessWidget {
                       ? CardStackWidget2(
                           cards: cards,
                           readOnly: true,
-                          inverted: true,
                           onCardTap: (i) =>
                               _openArchiveDetailModal(context, vm, i),
                         )
                       : CardStackWidget2(
                           cards: cards,
                           onCardTap: (i) => _openTaskDetailModal(context, vm, i),
-                          onSwipeLeft: () => vm.ignoreCardAt(0),
-                          onSwipeRight: () => vm.markCardAsDone(0),
-                          onFrontSwipeDown: () => vm.cycleFrontToEnd(),
+                          onSwipeLeft: (i) => vm.ignoreCardAt(i),
+                          onSwipeRight: (i) => vm.markCardAsDone(i),
                           onMoveCard: (from, to) => vm.moveCardTo(from, to),
                         ),
             ),
@@ -411,9 +414,9 @@ class _FabArea extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<StackViewModel>(
       builder: (context, vm, _) {
-        return FabWidget(
-          isOpen: vm.isModalOpen,
-          onTap: () => _openAddTaskModal(context, vm),
+        return FabStack(
+          onAddTap: () => _openAddTaskModal(context, vm),
+          onNotesTap: () => Scaffold.of(context).openEndDrawer(),
         );
       },
     );

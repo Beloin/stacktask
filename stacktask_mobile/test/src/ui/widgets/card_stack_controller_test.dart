@@ -10,7 +10,7 @@ void main() {
       expect(tapped, 3);
     });
 
-    test('tapCard invokes onCardTap for any index when no detailed view', () {
+    test('tapCard invokes onCardTap for any index', () {
       final tapped = <int>[];
       final controller = CardStackController(onCardTap: tapped.add);
       controller.tapCard(0);
@@ -18,14 +18,20 @@ void main() {
       expect(tapped, [0, 2]);
     });
 
-    test('tapCard only fires for the detailed card when in detailed view', () {
-      final tapped = <int>[];
-      final controller = CardStackController(onCardTap: tapped.add);
-      controller.setDetailedView(1);
-      controller.tapCard(0);
-      controller.tapCard(1);
-      controller.tapCard(2);
-      expect(tapped, [1]);
+    test('onSwipeLeft receives the front index', () {
+      int? swiped;
+      final controller = CardStackController(onSwipeLeft: (i) => swiped = i);
+      controller.onFrontDragStart(3);
+      controller.onSwipeLeft?.call(controller.frontIndex!);
+      expect(swiped, 3);
+    });
+
+    test('onSwipeRight receives the front index', () {
+      int? swiped;
+      final controller = CardStackController(onSwipeRight: (i) => swiped = i);
+      controller.onFrontDragStart(1);
+      controller.onSwipeRight?.call(controller.frontIndex!);
+      expect(swiped, 1);
     });
 
     test('onSelectedDragEnd invokes onMoveCard when index changes', () {
@@ -60,95 +66,46 @@ void main() {
     });
   });
 
-  group('CardStackController detailed view', () {
-    test('starts without detailed view', () {
-      final controller = CardStackController();
-      expect(controller.hasDetailedView, isFalse);
-      expect(controller.detailedViewIndex, isNull);
-    });
-
-    test('setDetailedView sets and notifies', () {
-      final controller = CardStackController();
-      var notified = false;
-      controller.addListener(() => notified = true);
-      controller.setDetailedView(2);
-      expect(controller.detailedViewIndex, 2);
-      expect(controller.hasDetailedView, isTrue);
-      expect(controller.isDetailedView(2), isTrue);
-      expect(controller.isDetailedView(1), isFalse);
-      expect(notified, isTrue);
-    });
-
-    test('setDetailedView with same index does not notify', () {
-      final controller = CardStackController();
-      controller.setDetailedView(1);
-      var notified = false;
-      controller.addListener(() => notified = true);
-      controller.setDetailedView(1);
-      expect(notified, isFalse);
-    });
-
-    test('clearDetailedView resets state', () {
-      final controller = CardStackController();
-      controller.setDetailedView(1);
-      controller.clearDetailedView();
-      expect(controller.hasDetailedView, isFalse);
-      expect(controller.detailedViewIndex, isNull);
-    });
-
-    test('select is blocked while in detailed view', () {
-      final controller = CardStackController();
-      controller.setDetailedView(1);
-      controller.select(0);
-      expect(controller.selectedIndex, isNull);
-    });
-
-    test('onFrontDragStart is blocked while in detailed view', () {
-      final controller = CardStackController();
-      controller.setDetailedView(1);
-      controller.onFrontDragStart();
-      expect(controller.isFrontDragging, isFalse);
-    });
-  });
-
   group('CardStackController gestures', () {
     test('onFrontDragStart/Update track offset', () {
       final controller = CardStackController();
-      controller.onFrontDragStart();
+      controller.onFrontDragStart(0);
       expect(controller.isFrontDragging, isTrue);
+      expect(controller.frontIndex, 0);
       controller.onFrontDragUpdate(const Offset(10, 5));
       controller.onFrontDragUpdate(const Offset(20, 5));
       expect(controller.frontDragX, 30);
-      expect(controller.frontDragY, 10);
     });
 
     test('onFrontDragEnd returns swipeLeft for far left drag', () {
       final controller = CardStackController();
-      controller.onFrontDragStart();
+      controller.onFrontDragStart(0);
       controller.onFrontDragUpdate(const Offset(-200, 0));
       final result = controller.onFrontDragEnd(Offset.zero);
       expect(result, FrontDragResult.swipeLeft);
+      expect(controller.frontIndex, 0);
     });
 
     test('onFrontDragEnd returns swipeRight for far right drag', () {
       final controller = CardStackController();
-      controller.onFrontDragStart();
+      controller.onFrontDragStart(0);
       controller.onFrontDragUpdate(const Offset(200, 0));
       final result = controller.onFrontDragEnd(Offset.zero);
       expect(result, FrontDragResult.swipeRight);
+      expect(controller.frontIndex, 0);
     });
 
-    test('onFrontDragEnd returns swipeDown for far down drag', () {
+    test('onFrontDragEnd returns none for vertical drag', () {
       final controller = CardStackController();
-      controller.onFrontDragStart();
+      controller.onFrontDragStart(0);
       controller.onFrontDragUpdate(const Offset(0, 150));
       final result = controller.onFrontDragEnd(Offset.zero);
-      expect(result, FrontDragResult.swipeDown);
+      expect(result, FrontDragResult.none);
     });
 
     test('onFrontDragEnd returns none for small drag', () {
       final controller = CardStackController();
-      controller.onFrontDragStart();
+      controller.onFrontDragStart(0);
       controller.onFrontDragUpdate(const Offset(10, 10));
       final result = controller.onFrontDragEnd(Offset.zero);
       expect(result, FrontDragResult.none);
@@ -175,8 +132,8 @@ void main() {
       final controller = CardStackController();
       controller.beginSwipeOut(SwipeOutDirection.left);
       expect(controller.swipeOutTarget, const Offset(-600, 0));
-      controller.beginSwipeOut(SwipeOutDirection.down);
-      expect(controller.swipeOutTarget, const Offset(0, 600));
+      controller.beginSwipeOut(SwipeOutDirection.right);
+      expect(controller.swipeOutTarget, const Offset(600, 0));
     });
 
     test('select sets selected and bypassed index', () {
@@ -199,18 +156,16 @@ void main() {
 
     test('reset clears all state', () {
       final controller = CardStackController();
-      controller.onFrontDragStart();
+      controller.onFrontDragStart(0);
       controller.onFrontDragUpdate(const Offset(50, 50));
       controller.select(1);
-      controller.setDetailedView(2);
       controller.beginSwipeOut(SwipeOutDirection.left);
       controller.reset();
+      expect(controller.frontIndex, isNull);
       expect(controller.frontDragX, 0);
-      expect(controller.frontDragY, 0);
       expect(controller.isFrontDragging, isFalse);
       expect(controller.isSwipingOut, isFalse);
       expect(controller.selectedIndex, isNull);
-      expect(controller.detailedViewIndex, isNull);
     });
   });
 }

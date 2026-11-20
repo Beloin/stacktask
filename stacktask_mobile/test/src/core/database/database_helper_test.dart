@@ -49,6 +49,16 @@ void main() {
           timestamp TEXT NOT NULL
         )
       ''');
+      await db.execute('''
+        CREATE TABLE ${DatabaseHelper.notesTable} (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          group_id TEXT NOT NULL,
+          position INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL
+        )
+      ''');
     });
 
     tearDown(() async {
@@ -78,6 +88,14 @@ void main() {
       final columnNames = result.map((row) => row['name'] as String).toList();
       expect(columnNames, containsAll([
         'id', 'name', 'created_at',
+      ]));
+    });
+
+    test('notes table has correct columns', () async {
+      final result = await db.rawQuery('PRAGMA table_info(notes)');
+      final columnNames = result.map((row) => row['name'] as String).toList();
+      expect(columnNames, containsAll([
+        'id', 'title', 'description', 'group_id', 'position', 'created_at',
       ]));
     });
 
